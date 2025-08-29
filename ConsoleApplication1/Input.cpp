@@ -9,28 +9,40 @@ glm::vec2 Input::mousePos(0.0f);
 glm::vec2 Input::mousePosPrev(0.0f);
 glm::vec2 Input::scrollDelta(0.0f);
 
-void Input::scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
+void Input::init(GLFWwindow* window) {
+	glfwSetScrollCallback(window, scrollCallBack);
+	glfwSetKeyCallback(window, keyCallBack);
+	glfwSetCursorPosCallback(window, cursorPosCallBack);
+	glfwSetMouseButtonCallback(window, mouseButtonCallBack);
+}
+
+void Input::keyCallBack(GLFWwindow* window, int key, int scanCode, int action, int mods) {
+	if (action == GLFW_PRESS) keys[key] = true;
+	else if (action == GLFW_RELEASE) keys[key] = false;
+}
+
+void Input::scrollCallBack(GLFWwindow* window, double xoffset, double yoffset) {
 	Input::scrollDelta = glm::vec2(xoffset, yoffset);
+}
+
+void Input::mouseButtonCallBack(GLFWwindow* window, int button, int action, int mods) {
+	if (action == GLFW_PRESS) mouseButtons[button] = true;
+	else if (action == GLFW_RELEASE) mouseButtons[button] = false;
+}
+
+void Input::cursorPosCallBack(GLFWwindow* window, double xpos, double ypos) {
+	mousePos = glm::vec2(xpos, ypos);
+
+	static bool firstUpdate = true;
+	if (firstUpdate) {
+		mousePosPrev = mousePos;
+		firstUpdate = false;
+	}
 }
 
 void Input::update(GLFWwindow* window) {
 	keysPrev = keys;
-	mouseButtonsPrev = mouseButtons;
-	mousePosPrev = mousePos;
-	scrollDelta = glm::vec2(0.0f);
-
-	for (int key = GLFW_KEY_SPACE; key <= GLFW_KEY_LAST; ++key) {
-		keys[key] = (glfwGetKey(window, key) == GLFW_PRESS);
-	}
-	for (int button = GLFW_MOUSE_BUTTON_1; button <= GLFW_MOUSE_BUTTON_LAST; ++button) {
-		mouseButtons[button] = (glfwGetMouseButton(window, button) == GLFW_PRESS);
-	}
-
-	double x, y;
-	glfwGetCursorPos(window, &x, &y);
-	mousePos = glm::vec2(x, y);
-
-	glfwSetScrollCallback(window, scrollCallback);
+	mouseButtonsPrev = mouseButtons;;
 }
 
 bool Input::isKeyPressed(int key) {
@@ -62,9 +74,19 @@ glm::vec2 Input::getMousePosition() {
 }
 
 glm::vec2 Input::getMouseDelta() {
-	return mousePos - mousePosPrev;
+	glm::vec2 delta = mousePos - mousePosPrev;
+	mousePosPrev = mousePos;
+
+	const float MAX_DELTA = 25.0f;
+	if (glm::length(delta) > MAX_DELTA) {
+		return glm::vec2(0.0f);
+	}
+
+	return delta;
 }
 
 glm::vec2 Input::getScrollDelta() {
-	return scrollDelta;
+	glm::vec2 delta = scrollDelta;
+	scrollDelta = glm::vec2(0.0f);
+	return delta;
 }

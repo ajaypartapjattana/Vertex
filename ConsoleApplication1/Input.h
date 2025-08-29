@@ -7,6 +7,7 @@
 class Input
 {
 public:
+	static void init(GLFWwindow* window);
 	static void update(GLFWwindow* window);
 
 	static bool isKeyPressed(int key);
@@ -21,7 +22,10 @@ public:
 	static glm::vec2 getMouseDelta();
 	static glm::vec2 getScrollDelta();
 
-	static void scrollCallback(GLFWwindow* window, double xoffset, double yoffset);
+	static void keyCallBack(GLFWwindow* window, int key, int scanCode, int action, int mods);
+	static void scrollCallBack(GLFWwindow* window, double xoffset, double yoffset);
+	static void mouseButtonCallBack(GLFWwindow* window, int button, int action, int mods);
+	static void cursorPosCallBack(GLFWwindow* window, double xpos, double ypos);
 
 private:
 	static std::unordered_map<int, bool> keys;

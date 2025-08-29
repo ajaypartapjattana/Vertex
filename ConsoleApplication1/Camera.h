@@ -24,6 +24,8 @@ public:
 	glm::mat4 getProjectionMatrix() const;
 	glm::vec3 getPosition() const { return position; }
 
+	float getCameraFov();
+
 private:
 	glm::vec3 position;
 	glm::vec3 front;

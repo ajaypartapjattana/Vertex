@@ -149,8 +149,11 @@ public:
     void run() {
         initWindow();
         initVulkan();
+        Input::init(window);
         createImGuiContext();
+
         mainloop();
+
         destroyImGuiContext();
         cleanup();
     }
@@ -1603,24 +1606,29 @@ private:
     void handleInputs() {
         float deltaTime = getDeltaTime();
 
-        Input::update(window);
         glm::vec2 scrollDelta =  Input::getScrollDelta();
 
-        float cameraSensetivity = 2.5f * deltaTime;
-        if (Input::isKeyDown(GLFW_KEY_W)) camera.moveForward(cameraSensetivity);
-        if (Input::isKeyDown(GLFW_KEY_S)) camera.moveBackward(cameraSensetivity);
-        if (Input::isKeyDown(GLFW_KEY_D)) camera.moveRight(cameraSensetivity);
-        if (Input::isKeyDown(GLFW_KEY_A)) camera.moveLeft(cameraSensetivity);
-        if (Input::isKeyDown(GLFW_KEY_E)) camera.moveUp(cameraSensetivity);
-        if (Input::isKeyDown(GLFW_KEY_Q)) camera.moveDown(cameraSensetivity);
+        float moveSpeed = 2.0f * deltaTime;
+        float cameraSensitivity = 0.25f * (camera.getCameraFov()/90.0f);
+        if (scrollDelta.y != 0) {
+            camera.zoom(scrollDelta.y * 1000.0f * moveSpeed);
+        }
 
-        if (Input::isKeyDown(GLFW_KEY_COMMA)) camera.zoom(10.0f * cameraSensetivity);
-        if (Input::isKeyDown(GLFW_KEY_PERIOD)) camera.zoom(-10.0f * cameraSensetivity);
+        if (Input::isKeyDown(GLFW_KEY_W)) camera.moveForward(moveSpeed);
+        if (Input::isKeyDown(GLFW_KEY_S)) camera.moveBackward(moveSpeed);
+        if (Input::isKeyDown(GLFW_KEY_D)) camera.moveRight(moveSpeed);
+        if (Input::isKeyDown(GLFW_KEY_A)) camera.moveLeft(moveSpeed);
+        if (Input::isKeyDown(GLFW_KEY_E)) camera.moveUp(moveSpeed);
+        if (Input::isKeyDown(GLFW_KEY_Q)) camera.moveDown(moveSpeed);
 
         if (Input::isMouseButtonDown(GLFW_MOUSE_BUTTON_RIGHT)) {
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
             glm::vec2 delta = Input::getMouseDelta();
-            camera.rotate(delta.x * 0.25f, delta.y * -0.25f);
+            camera.rotate(delta.x * cameraSensitivity, delta.y * -cameraSensitivity);
+        }else {
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
         }
+        Input::update(window);
     }
 
     float getDeltaTime() {

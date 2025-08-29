@@ -79,3 +79,7 @@ void Camera::updateCameraVectors() {
 	right = glm::normalize(glm::cross(front, worldUp));
 	up = glm::normalize(glm::cross(right, front));
 }
+
+float Camera::getCameraFov() {
+	return Camera::fov;
+}
