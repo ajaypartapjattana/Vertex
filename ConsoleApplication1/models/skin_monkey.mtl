@@ -1,0 +1,12 @@
+# Blender 4.5.0 MTL File: 'skin_monkey.blend'
+# www.blender.org
+
+newmtl Material.001
+Ns 654.628113
+Ka 1.000000 1.000000 1.000000
+Kd 0.800228 0.437286 0.276255
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2

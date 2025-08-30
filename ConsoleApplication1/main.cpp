@@ -85,6 +85,7 @@ struct SwapChainSupportDetails {
 
 struct Vertex{
     glm::vec3 pos;
+    glm::vec3 normal;
     glm::vec3 color;
     glm::vec2 texCoord;
     static VkVertexInputBindingDescription getBindingDescription() {
@@ -94,8 +95,8 @@ struct Vertex{
         bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
         return bindingDescription;
     }
-    static std::array<VkVertexInputAttributeDescription, 3> getAttributeDescriptions() {
-        std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions{};
+    static std::array<VkVertexInputAttributeDescription, 4> getAttributeDescriptions() {
+        std::array<VkVertexInputAttributeDescription, 4> attributeDescriptions{};
         attributeDescriptions[0].binding = 0;
         attributeDescriptions[0].location = 0;
         attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
@@ -104,16 +105,21 @@ struct Vertex{
         attributeDescriptions[1].binding = 0;
         attributeDescriptions[1].location = 1;
         attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-        attributeDescriptions[1].offset = offsetof(Vertex, color);
+        attributeDescriptions[1].offset = offsetof(Vertex, normal);
 
         attributeDescriptions[2].binding = 0;
         attributeDescriptions[2].location = 2;
-        attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
-        attributeDescriptions[2].offset = offsetof(Vertex, texCoord);
+        attributeDescriptions[2].format = VK_FORMAT_R32G32B32_SFLOAT;
+        attributeDescriptions[2].offset = offsetof(Vertex, color);
+
+        attributeDescriptions[3].binding = 0;
+        attributeDescriptions[3].location = 3;
+        attributeDescriptions[3].format = VK_FORMAT_R32G32_SFLOAT;
+        attributeDescriptions[3].offset = offsetof(Vertex, texCoord);
         return attributeDescriptions;
     }
     bool operator == (const Vertex& other) const {
-        return pos == other.pos && color == other.color && texCoord == other.texCoord;
+        return pos == other.pos && normal == other.normal && color == other.color && texCoord == other.texCoord;
     }
 };
 
@@ -124,6 +130,10 @@ namespace std {
         }
     };
 }
+
+struct RenderState {
+    bool smoothNormals;
+};
 
 struct ModelAttribs {
     size_t objCount;
@@ -142,6 +152,9 @@ struct UniformBufferObject{
     alignas(16) glm::mat4 model;
     alignas(16) glm::mat4 view;
     alignas(16) glm::mat4 proj;
+
+    alignas(16) glm::vec4 lightDir;
+    alignas(16) glm::vec4 lightColor;
 };
 
 class TriangleDrawApplication {
@@ -222,6 +235,8 @@ private:
     bool framebufferResized = false;
 
     ImGuiLayer imgui;
+
+    RenderState objRenderState{false};
 
     Camera camera{glm::vec3(2.0f, 2.0f, 2.0f), (float)swapChainExtent.width/swapChainExtent.width};
 
@@ -721,7 +736,7 @@ private:
         uboLayoutBinding.binding = 0;
         uboLayoutBinding.descriptorCount = 1;
         uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
         uboLayoutBinding.pImmutableSamplers = nullptr;
 
         VkDescriptorSetLayoutBinding samplerLayoutBinding;
@@ -821,7 +836,7 @@ private:
         rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
         rasterizer.depthClampEnable = VK_FALSE;
         rasterizer.rasterizerDiscardEnable = VK_FALSE;
-        rasterizer.polygonMode = VK_POLYGON_MODE_LINE;
+        rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
         rasterizer.lineWidth = 1.0f;
         rasterizer.cullMode = VK_CULL_MODE_NONE;
         rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
@@ -907,7 +922,6 @@ private:
             throw std::runtime_error("failed to open file!" + filename);
         }
         size_t fileSize = (size_t)file.tellg();
-        //std::cout << filename << ": " << fileSize << std::endl;
         std::vector<char> buffer(fileSize);
         file.seekg(0);
         file.read(buffer.data(), fileSize);
@@ -1378,6 +1392,11 @@ private:
                     attrib.vertices[3 * index.vertex_index + 1],
                     attrib.vertices[3 * index.vertex_index + 2]
                 };
+                vertex.normal = {
+                    attrib.normals[3 * index.normal_index + 0],
+                    attrib.normals[3 * index.normal_index + 1],
+                    attrib.normals[3 * index.normal_index + 2]
+                };
                 vertex.texCoord = {
                     attrib.texcoords[2 * index.texcoord_index + 0],
                     1.0f - attrib.texcoords[2 * index.texcoord_index + 1],
@@ -1600,6 +1619,9 @@ private:
         ubo.view = camera.getViewMatrix();
         ubo.proj = camera.getProjectionMatrix();
 
+        ubo.lightDir = glm::vec4(glm::normalize(glm::vec3(0.5f, 1.0f, 0.3f)), 0.0f);
+        ubo.lightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+
         memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
     }
 
@@ -1621,7 +1643,7 @@ private:
         if (Input::isKeyDown(GLFW_KEY_E)) camera.moveUp(moveSpeed);
         if (Input::isKeyDown(GLFW_KEY_Q)) camera.moveDown(moveSpeed);
 
-        if (Input::isMouseButtonDown(GLFW_MOUSE_BUTTON_RIGHT)) {
+        if (Input::isMouseButtonDown(GLFW_MOUSE_BUTTON_MIDDLE)) {
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
             glm::vec2 delta = Input::getMouseDelta();
             camera.rotate(delta.x * cameraSensitivity, delta.y * -cameraSensitivity);
@@ -1643,9 +1665,13 @@ private:
         imgui.beginFrame();
 
         ImGui::Begin("Controls");
-        ImGui::SliderFloat3("Position", &modelTransforms.position.x, -2.0f, 2.0f);
-        ImGui::SliderFloat3("Rotation", &modelTransforms.rotation.x, -180.0f, 180.0f);
-        ImGui::SliderFloat3("Scale", &modelTransforms.scale.x, 0.1f, 2.0f);
+
+        ImGui::DragFloat3("Position", &modelTransforms.position.x, 0.01f, -2.0f, 2.0f);
+        ImGui::DragFloat3("Rotation", &modelTransforms.rotation.x, 0.5f, -180.0f, 180.0f);
+        ImGui::DragFloat3("Scale", &modelTransforms.scale.x, 0.01f, 0.1f, 2.0f);
+
+        ImGui::Checkbox("enableSmoothNormals", &objRenderState.smoothNormals);
+
         ImGui::End();
     }
 };
