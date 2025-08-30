@@ -133,6 +133,8 @@ namespace std {
 
 struct RenderState {
     bool smoothNormals;
+    glm::vec3 lightDir;
+    glm::vec3 lightColor;
 };
 
 struct ModelAttribs {
@@ -236,7 +238,7 @@ private:
 
     ImGuiLayer imgui;
 
-    RenderState objRenderState{false};
+    RenderState objRenderState{ false, glm::vec3(0.5f, 1.0f, 0.3f), glm::vec3(1.0f, 1.0f, 1.0f) };
 
     Camera camera{glm::vec3(2.0f, 2.0f, 2.0f), (float)swapChainExtent.width/swapChainExtent.width};
 
@@ -1619,8 +1621,8 @@ private:
         ubo.view = camera.getViewMatrix();
         ubo.proj = camera.getProjectionMatrix();
 
-        ubo.lightDir = glm::vec4(glm::normalize(glm::vec3(0.5f, 1.0f, 0.3f)), 0.0f);
-        ubo.lightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+        ubo.lightDir = glm::vec4(glm::normalize(objRenderState.lightDir), 0.0f);
+        ubo.lightColor = glm::vec4(objRenderState.lightColor, 1.0f);
 
         memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
     }
@@ -1671,6 +1673,9 @@ private:
         ImGui::DragFloat3("Scale", &modelTransforms.scale.x, 0.01f, 0.1f, 2.0f);
 
         ImGui::Checkbox("enableSmoothNormals", &objRenderState.smoothNormals);
+
+        ImGui::DragFloat3("Direction", &objRenderState.lightDir.x, 0.01f, -10.0f, 10.0f);
+        ImGui::DragFloat3("Color", &objRenderState.lightColor.x, 0.01f, 0.0f, 1.0f);
 
         ImGui::End();
     }
