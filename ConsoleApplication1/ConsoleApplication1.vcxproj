@@ -150,6 +150,7 @@
     <ClCompile Include="Input.cpp" />
     <ClCompile Include="model.cpp" />
     <ClCompile Include="ModelManager.cpp" />
+    <ClCompile Include="VulkanUtils.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Camera.h" />
@@ -158,6 +159,7 @@
     <ClInclude Include="model.h" />
     <ClInclude Include="ModelManager.h" />
     <ClInclude Include="Vertex.h" />
+    <ClInclude Include="VulkanUtils.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -8,17 +8,38 @@
 
 #include "Vertex.h"
 
+struct ModelAttribs {
+	size_t trisCount;
+	size_t vertCount;
+	size_t uniqueVertCount;
+};
+
+struct UniformBufferObject {
+	alignas(16) glm::mat4 model;
+	alignas(16) glm::mat4 view;
+	alignas(16) glm::mat4 proj;
+
+	alignas(16) glm::vec4 lightDir;
+	alignas(16) glm::vec4 lightColor;
+};
+
 class Model {
 public:
-	Model () = default;
-	~Model ();
+	Model() = default;
+	~Model();
 
 	void loadFromFile(const std::string& path);
 	void createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue);
+	void createUniformBuffer(VkDevice device, VkPhysicalDevice physicalDevice, uint16_t MAX_FRAMES_IN_FLIGHT);
+	void updateUBO(VkDevice device, const UniformBufferObject& uboData, uint32_t currentImage);
+	void createTexture(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, const std::string& texture_path);
+	void createDescriptorSet(VkDevice device, VkDescriptorPool descriptorPool, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT);
+	void draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint16_t currentFrame);
 	void cleanup(VkDevice device);
-	void draw(VkCommandBuffer commandBuffer);
 
 private:
+	ModelAttribs loadedModelAttributes;
+
 	std::vector<Vertex> vertices;
 	std::vector<uint32_t> indices;
 
@@ -26,4 +47,15 @@ private:
 	VkDeviceMemory vertexBufferMemory{ VK_NULL_HANDLE };
 	VkBuffer indexBuffer{ VK_NULL_HANDLE };
 	VkDeviceMemory indexBufferMemory{ VK_NULL_HANDLE };
+
+	std::vector<VkBuffer> uniformBuffers;
+	std::vector<VkDeviceMemory> uniformBuffersMemory;
+	std::vector<void*> uniformBuffersMapped;
+
+	VkImage textureImage{ VK_NULL_HANDLE };
+	VkDeviceMemory textureImageMemory{ VK_NULL_HANDLE };
+	VkImageView textureImageView{ VK_NULL_HANDLE };
+	VkSampler textureSampler{ VK_NULL_HANDLE };
+
+	std::vector<VkDescriptorSet> descriptorSets;
 };

@@ -7,9 +7,11 @@
 
 class ModelManager {
 public:
-	void loadModel(const std::string& path, VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue);
-	void drawAll(VkCommandBuffer commandBuffer);
+	void loadModel(const std::string& obj_path, const std::string& texture_path, VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, uint16_t FRAMES_IN_FLIGHT);
+	void createModelDescriptorSets(VkDevice device, VkDescriptorPool descriptorPool, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT);
+	void drawAll(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint16_t currentFrame);
 	void cleanUp(VkDevice device);
+	Model* getModel(size_t index);
 
 private:
 	std::vector<std::unique_ptr<Model>> models;
