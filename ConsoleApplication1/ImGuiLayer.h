@@ -7,7 +7,7 @@
 class ImGuiLayer
 {
 public:
-	void init(VkInstance instance, VkDevice device, VkPhysicalDevice physicalDevice, uint32_t queueFamily, VkQueue queue , VkRenderPass renderPass, uint32_t imageCount, GLFWwindow* window);
+	void init(VkInstance instance, VkDevice device, VkPhysicalDevice physicalDevice, uint32_t queueFamily, VkQueue queue , VkRenderPass renderPass, size_t imageCount, GLFWwindow* window);
 
 	void beginFrame();
 	void endFrame(VkCommandBuffer commandBuffer);

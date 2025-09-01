@@ -10,7 +10,7 @@ void ModelManager::loadModel(const std::string& obj_path, const std::string& tex
 	models.push_back(std::move(model));
 }
 
-void ModelManager::createModelDescriptorSets(VkDevice device, VkDescriptorPool descriptorPool, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT) {
+void ModelManager::createModelDescriptorSets(VkDevice device, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT) {
 	for (auto& model : models) {
 		model->createDescriptorSet(device, descriptorSetLayout, FRAMES_IN_FLIGHT);
 	}

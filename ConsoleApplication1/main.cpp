@@ -10,7 +10,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/hash.hpp>
-#include <imgui.h>
 
 #include <chrono>
 #include <fstream>
@@ -34,8 +33,8 @@
 #include "Vertex.h"
 #include "VulkanUtils.h"
 
-const uint32_t WIDTH = 800;
-const uint32_t HEIGHT = 600;
+const uint32_t WIDTH = 1200;
+const uint32_t HEIGHT = 800;
 
 const std::string MODEL_PATH_1 = "models/skin_monkey.obj";
 const std::string TEXTURE_PATH_1 = "textures/suzaneSkinTexture_BL.png";
@@ -142,33 +141,9 @@ private:
 
     uint32_t currentFrame = 0;
 
-    std::vector<Vertex> vertices;
-    VkBuffer vertexBuffer;
-    VkDeviceMemory vertexBufferMemory;
-
-    std::vector<uint32_t> indices;
-    VkBuffer indexBuffer;
-    VkDeviceMemory indexBufferMemory;
-
-    //to remove.
-    std::vector<VkBuffer> uniformBuffers;
-    std::vector<VkDeviceMemory> uniformBuffersMemory;
-    std::vector<void*> uniformBuffersMapped;
-
-
-    VkDescriptorPool descriptorPool;
-
     VkImage depthImage;
     VkDeviceMemory depthImageMemory;
     VkImageView depthImageView;
-
-    //to remove.
-    VkImage textureImage;
-    VkDeviceMemory textureImageMemory;
-    VkImageView textureImageView;
-
-    //to remove.
-    VkSampler textureSampler;
 
     bool framebufferResized = false;
 
@@ -208,7 +183,7 @@ private:
         createFramebuffers();
         modelManager.loadModel(MODEL_PATH_1, TEXTURE_PATH_1, device, physicalDevice, commandPool, graphicsQueue, MAX_FRAMES_IN_FLIGHT);
         modelManager.loadModel(MODEL_PATH_2, TEXTURE_PATH_2, device, physicalDevice, commandPool, graphicsQueue, MAX_FRAMES_IN_FLIGHT);
-        modelManager.createModelDescriptorSets(device, descriptorPool, descriptorSetLayout, MAX_FRAMES_IN_FLIGHT);
+        modelManager.createModelDescriptorSets(device, descriptorSetLayout, MAX_FRAMES_IN_FLIGHT);
         createCommandBuffers();
         createSyncObjects();
     }
@@ -245,21 +220,6 @@ private:
     void cleanup() {
         cleanupSwapChain();
 
-        vkDestroySampler(device, textureSampler, nullptr);
-
-        vkDestroyImageView(device, textureImageView, nullptr);
-        vkDestroyImage(device, textureImage, nullptr);
-        vkFreeMemory(device, textureImageMemory, nullptr);
-
-        for (size_t i = 0; i < uniformBuffers.size(); i++) {
-            if (uniformBuffers[i] != VK_NULL_HANDLE) {
-                vkDestroyBuffer(device, uniformBuffers[i], nullptr);
-            }
-            if (uniformBuffersMemory[i] != VK_NULL_HANDLE) {
-                vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
-            }
-        }
-        vkDestroyDescriptorPool(device, descriptorPool, nullptr);
         vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 
         modelManager.cleanUp(device);
@@ -958,9 +918,6 @@ private:
         scissor.extent = swapChainExtent;
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-        VkBuffer vertexBuffers[] = { vertexBuffer };
-        VkDeviceSize offsets[] = { 0 };
-
         modelManager.drawAll(commandBuffer, pipelineLayout, currentFrame);
 
         imgui.endFrame(commandBuffers[currentFrame]);
@@ -1104,12 +1061,6 @@ private:
         throw std::runtime_error("failed to find supported format!");
     }
 
-    //to remove.
-    bool hasStencilComponent(VkFormat format) {
-        return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
-    }
-
-    //possible remove.
     void updateUniformBuffer(uint32_t currentImage) {
         for (auto& model : modelManager.getModelList()) {
             UniformBufferObject ubo{};

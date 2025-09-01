@@ -4,7 +4,7 @@
 
 #include <array>
 
-void ImGuiLayer::init(VkInstance instance, VkDevice device, VkPhysicalDevice physicalDevice, uint32_t queueFamily, VkQueue queue, VkRenderPass renderPass, uint32_t imageCount, GLFWwindow* window) {
+void ImGuiLayer::init(VkInstance instance, VkDevice device, VkPhysicalDevice physicalDevice, uint32_t queueFamily, VkQueue queue, VkRenderPass renderPass, size_t imageCount, GLFWwindow* window) {
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGui::StyleColorsDark();
@@ -31,8 +31,8 @@ void ImGuiLayer::init(VkInstance instance, VkDevice device, VkPhysicalDevice phy
 	initInfo.QueueFamily = queueFamily;
 	initInfo.Queue = queue;
 	initInfo.DescriptorPool = imGuiDescriptorPool;
-	initInfo.MinImageCount = imageCount;
-	initInfo.ImageCount = imageCount;
+	initInfo.MinImageCount = static_cast<uint32_t>(imageCount);
+	initInfo.ImageCount = static_cast<uint32_t>(imageCount);
 	initInfo.RenderPass = renderPass;
 
 	ImGui_ImplVulkan_Init(&initInfo);
