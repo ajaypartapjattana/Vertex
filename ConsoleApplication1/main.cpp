@@ -37,8 +37,11 @@
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 
-const std::string MODEL_PATH = "models/skin_monkey.obj";
-const std::string TEXTURE_PATH = "textures/suzaneSkinTexture_BL.png";
+const std::string MODEL_PATH_1 = "models/skin_monkey.obj";
+const std::string TEXTURE_PATH_1 = "textures/suzaneSkinTexture_BL.png";
+
+const std::string MODEL_PATH_2 = "models/test_model.obj";
+const std::string TEXTURE_PATH_2 = "textures/testModelLightingPass.png";
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -86,12 +89,6 @@ struct RenderState {
     bool smoothNormals;
     glm::vec3 lightDir;
     glm::vec3 lightColor;
-};
-
-struct Transform {
-    glm::vec3 position;
-    glm::vec3 rotation;
-    glm::vec3 scale;
 };
 
 class TriangleDrawApplication {
@@ -183,12 +180,6 @@ private:
 
     ModelManager modelManager;
 
-    Transform modelTransforms = {
-        glm::vec3(0.0f, 0.0f, 0.0f),
-        glm::vec3(0.0f, 0.0f, 0.0f),
-        glm::vec3(1.0f, 1.0f, 1.0f)
-    };
-
     void initWindow() {
         glfwInit();
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -215,8 +206,8 @@ private:
         createCommandPool();
         createDepthResources();
         createFramebuffers();
-        createDescriptorPool();
-        modelManager.loadModel(MODEL_PATH, TEXTURE_PATH, device, physicalDevice, commandPool, graphicsQueue, MAX_FRAMES_IN_FLIGHT);
+        modelManager.loadModel(MODEL_PATH_1, TEXTURE_PATH_1, device, physicalDevice, commandPool, graphicsQueue, MAX_FRAMES_IN_FLIGHT);
+        modelManager.loadModel(MODEL_PATH_2, TEXTURE_PATH_2, device, physicalDevice, commandPool, graphicsQueue, MAX_FRAMES_IN_FLIGHT);
         modelManager.createModelDescriptorSets(device, descriptorPool, descriptorSetLayout, MAX_FRAMES_IN_FLIGHT);
         createCommandBuffers();
         createSyncObjects();
@@ -1117,47 +1108,26 @@ private:
     bool hasStencilComponent(VkFormat format) {
         return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
     }
-    
-    void createDescriptorPool() {
-        std::array<VkDescriptorPoolSize, 2> poolSizes;
-        poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-
-        poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-
-        VkDescriptorPoolCreateInfo poolInfo{};
-        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-        poolInfo.pPoolSizes = poolSizes.data();
-        poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-
-        if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create descriptor pool!");
-        }
-    }
 
     //possible remove.
     void updateUniformBuffer(uint32_t currentImage) {
-        auto* model = modelManager.getModel(0);
+        for (auto& model : modelManager.getModelList()) {
+            UniformBufferObject ubo{};
 
-        UniformBufferObject ubo{};
+            ubo.model = glm::translate(glm::mat4(1.0f), model->modelTransforms.position);
+            ubo.model = glm::rotate(ubo.model, glm::radians(model->modelTransforms.rotation.x), glm::vec3(1, 0, 0));
+            ubo.model = glm::rotate(ubo.model, glm::radians(model->modelTransforms.rotation.y), glm::vec3(0, 1, 0));
+            ubo.model = glm::rotate(ubo.model, glm::radians(model->modelTransforms.rotation.z), glm::vec3(0, 0, 1));
+            ubo.model = glm::scale(ubo.model, model->modelTransforms.scale);
 
-        ubo.model = glm::translate(glm::mat4(1.0f), modelTransforms.position);
-        ubo.model = glm::rotate(ubo.model, glm::radians(modelTransforms.rotation.x), glm::vec3(1, 0, 0));
-        ubo.model = glm::rotate(ubo.model, glm::radians(modelTransforms.rotation.y), glm::vec3(0, 1, 0));
-        ubo.model = glm::rotate(ubo.model, glm::radians(modelTransforms.rotation.z), glm::vec3(0, 0, 1));
-        ubo.model = glm::scale(ubo.model, modelTransforms.scale);
+            ubo.view = camera.getViewMatrix();
+            ubo.proj = camera.getProjectionMatrix();
 
-        ubo.view = camera.getViewMatrix();
-        ubo.proj = camera.getProjectionMatrix();
+            ubo.lightDir = glm::vec4(glm::normalize(objRenderState.lightDir), 0.0f);
+            ubo.lightColor = glm::vec4(objRenderState.lightColor, 1.0f);
 
-        ubo.lightDir = glm::vec4(glm::normalize(objRenderState.lightDir), 0.0f);
-        ubo.lightColor = glm::vec4(objRenderState.lightColor, 1.0f);
-
-        model->updateUBO(device, ubo, currentImage);
-
-        //memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+            model->updateUBO(device, ubo, currentImage);
+        }
     }
 
     void handleInputs() {
@@ -1201,9 +1171,16 @@ private:
 
         ImGui::Begin("Controls");
 
-        ImGui::DragFloat3("Position", &modelTransforms.position.x, 0.01f, -2.0f, 2.0f);
-        ImGui::DragFloat3("Rotation", &modelTransforms.rotation.x, 0.5f, -180.0f, 180.0f);
-        ImGui::DragFloat3("Scale", &modelTransforms.scale.x, 0.01f, 0.1f, 2.0f);
+        int index = 0;
+        for (auto& model : modelManager.getModelList()) {
+            if (ImGui::CollapsingHeader(("Model" + std::to_string(index)).c_str())) {
+                ImGui::DragFloat3("Position", &model->modelTransforms.position.x, 0.01f, -2.0f, 2.0f);
+                ImGui::DragFloat3("Rotation", &model->modelTransforms.rotation.x, 0.5f, -180.0f, 180.0f);
+                ImGui::DragFloat3("Scale", &model->modelTransforms.scale.x, 0.01f, 0.1f, 2.0f);
+            }
+            index++;
+        }
+        
 
         ImGui::Checkbox("enableSmoothNormals", &objRenderState.smoothNormals);
 

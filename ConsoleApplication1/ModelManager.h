@@ -12,6 +12,7 @@ public:
 	void drawAll(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint16_t currentFrame);
 	void cleanUp(VkDevice device);
 	Model* getModel(size_t index);
+	std::vector<std::unique_ptr<Model>>& getModelList();
 
 private:
 	std::vector<std::unique_ptr<Model>> models;

@@ -95,6 +95,25 @@ void Model::createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkCom
     vkFreeMemory(device, stagingBufferMemory, nullptr);
 }
 
+void Model::createDescriptorPool(VkDevice device, uint16_t MAX_FRAMES_IN_FLIGHT) {
+    std::array<VkDescriptorPoolSize, 2> poolSizes;
+    poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+
+    poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+
+    VkDescriptorPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+    poolInfo.pPoolSizes = poolSizes.data();
+    poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+
+    if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create descriptor pool!");
+    }
+}
+
 void Model::createTexture(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, const std::string& texture_path) {
     int texWidth, texHeight, texChannels;
     stbi_uc* pixels = stbi_load(texture_path.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
@@ -143,7 +162,7 @@ void Model::updateUBO(VkDevice device, const UniformBufferObject& uboData, uint3
     memcpy(uniformBuffersMapped[currentImage], &uboData, sizeof(uboData));
 }
 
-void Model::createDescriptorSet(VkDevice device, VkDescriptorPool descriptorPool, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT) {
+void Model::createDescriptorSet(VkDevice device, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT) {
     std::vector<VkDescriptorSetLayout> layouts(FRAMES_IN_FLIGHT, descriptorSetLayout);
 
     VkDescriptorSetAllocateInfo allocInfo{};
@@ -215,6 +234,11 @@ void Model::cleanup(VkDevice device) {
         vkDestroyBuffer(device, vertexBuffer, nullptr);
         vkFreeMemory(device, vertexBufferMemory, nullptr);
         vertexBuffer = VK_NULL_HANDLE;
+    }
+
+    if (descriptorPool != VK_NULL_HANDLE) {
+        vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+        descriptorPool = VK_NULL_HANDLE;
     }
 
     for (size_t i = 0; i < descriptorSets.size(); ++i) {

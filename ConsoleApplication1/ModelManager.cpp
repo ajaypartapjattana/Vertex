@@ -4,6 +4,7 @@ void ModelManager::loadModel(const std::string& obj_path, const std::string& tex
 	auto model = std::make_unique<Model>();
 	model->loadFromFile(obj_path);
 	model->createBuffer(device, physicalDevice, commandPool, queue);
+	model->createDescriptorPool(device, FRAMES_IN_FLIGHT);
 	model->createTexture(device, physicalDevice, commandPool, queue, texture_path);
 	model->createUniformBuffer(device, physicalDevice, FRAMES_IN_FLIGHT);
 	models.push_back(std::move(model));
@@ -11,7 +12,7 @@ void ModelManager::loadModel(const std::string& obj_path, const std::string& tex
 
 void ModelManager::createModelDescriptorSets(VkDevice device, VkDescriptorPool descriptorPool, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT) {
 	for (auto& model : models) {
-		model->createDescriptorSet(device, descriptorPool, descriptorSetLayout, FRAMES_IN_FLIGHT);
+		model->createDescriptorSet(device, descriptorSetLayout, FRAMES_IN_FLIGHT);
 	}
 }
 
@@ -31,4 +32,8 @@ void ModelManager::cleanUp(VkDevice device) {
 Model* ModelManager::getModel(size_t index) { 
 	if (index >= models.size()) return nullptr;
 	return models[index].get(); 
+}
+
+std::vector<std::unique_ptr<Model>>& ModelManager::getModelList() {
+	return models;
 }
