@@ -92,7 +92,7 @@ struct RenderState {
 };
 
 struct PushConstants {
-    bool useTexture;
+    int useTexture;
 };
 
 class TriangleDrawApplication {
