@@ -39,8 +39,8 @@ const uint32_t HEIGHT = 800;
 const std::string MODEL_PATH_1 = "models/skin_monkey.obj";
 const std::string TEXTURE_PATH_1 = "textures/suzaneSkinTexture_BL.png";
 
-const std::string MODEL_PATH_2 = "models/test_model.obj";
-const std::string TEXTURE_PATH_2 = "textures/testModelLightingPass.png";
+const std::string MODEL_PATH_2 = "models/car.obj";
+const std::string TEXTURE_PATH_2 = "textures/carTexture.png";
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -86,8 +86,13 @@ struct SwapChainSupportDetails {
 
 struct RenderState {
     bool smoothNormals;
+    bool enableTextures;
     glm::vec3 lightDir;
     glm::vec3 lightColor;
+};
+
+struct PushConstants {
+    bool useTexture;
 };
 
 class TriangleDrawApplication {
@@ -149,7 +154,7 @@ private:
 
     ImGuiLayer imgui;
 
-    RenderState objRenderState{ false, glm::vec3(0.5f, 1.0f, 0.3f), glm::vec3(1.0f, 1.0f, 1.0f) };
+    RenderState sceneRenderState{ true, false, glm::vec3(0.5f, 1.0f, 0.3f), glm::vec3(1.0f, 1.0f, 1.0f) };
 
     Camera camera{glm::vec3(2.0f, 2.0f, 2.0f), (float)swapChainExtent.width/swapChainExtent.width};
 
@@ -763,12 +768,17 @@ private:
         colorBlending.blendConstants[2] = 0.0f;
         colorBlending.blendConstants[3] = 0.0f;
 
+        VkPushConstantRange pushConstantsRange{};
+        pushConstantsRange.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        pushConstantsRange.size = sizeof(PushConstants);
+        pushConstantsRange.offset = 0;
+
         VkPipelineLayoutCreateInfo  pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pipelineLayoutInfo.setLayoutCount = 1;
         pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
-        pipelineLayoutInfo.pushConstantRangeCount = 0;
-        pipelineLayoutInfo.pPushConstantRanges = nullptr;
+        pipelineLayoutInfo.pushConstantRangeCount = 1;
+        pipelineLayoutInfo.pPushConstantRanges = &pushConstantsRange;
 
         if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
             throw std::runtime_error("failed to create pipeline layout!");
@@ -784,7 +794,6 @@ private:
         pipelineInfo.pViewportState = &viewportState;
         pipelineInfo.pRasterizationState = &rasterizer;
         pipelineInfo.pMultisampleState = &multisampling;
-        pipelineInfo.pDepthStencilState = nullptr;
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pDynamicState = &dynamicState;
@@ -918,6 +927,10 @@ private:
         scissor.extent = swapChainExtent;
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
+        PushConstants pc{};
+        pc.useTexture = (sceneRenderState.enableTextures) ? 1 : 0;
+        vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pc);
+
         modelManager.drawAll(commandBuffer, pipelineLayout, currentFrame);
 
         imgui.endFrame(commandBuffers[currentFrame]);
@@ -957,7 +970,7 @@ private:
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-        VkSemaphore waitSemaphores[] = { imageAvailableSemaphores[currentFrame]};
+        VkSemaphore waitSemaphores[] = { imageAvailableSemaphores[currentFrame] };
         VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
         submitInfo.waitSemaphoreCount = 1;
         submitInfo.pWaitSemaphores = waitSemaphores;
@@ -965,7 +978,7 @@ private:
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &commandBuffers[currentFrame];
 
-        VkSemaphore signalSemaphores[] = { renderFinishedSemaphores[imageIndex]};
+        VkSemaphore signalSemaphores[] = { renderFinishedSemaphores[imageIndex] };
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores = signalSemaphores;
 
@@ -1074,8 +1087,8 @@ private:
             ubo.view = camera.getViewMatrix();
             ubo.proj = camera.getProjectionMatrix();
 
-            ubo.lightDir = glm::vec4(glm::normalize(objRenderState.lightDir), 0.0f);
-            ubo.lightColor = glm::vec4(objRenderState.lightColor, 1.0f);
+            ubo.lightDir = glm::vec4(glm::normalize(sceneRenderState.lightDir), 0.0f);
+            ubo.lightColor = glm::vec4(sceneRenderState.lightColor, 1.0f);
 
             model->updateUBO(device, ubo, currentImage);
         }
@@ -1098,6 +1111,11 @@ private:
         if (Input::isKeyDown(GLFW_KEY_A)) camera.moveLeft(moveSpeed);
         if (Input::isKeyDown(GLFW_KEY_E)) camera.moveUp(moveSpeed);
         if (Input::isKeyDown(GLFW_KEY_Q)) camera.moveDown(moveSpeed);
+
+        if (Input::isKeyDown(GLFW_KEY_RIGHT)) camera.rotate(0.5f, 0);
+        if (Input::isKeyDown(GLFW_KEY_LEFT)) camera.rotate(-0.5f, 0);
+        if (Input::isKeyDown(GLFW_KEY_UP)) camera.rotate(0, 0.5f);
+        if (Input::isKeyDown(GLFW_KEY_DOWN)) camera.rotate(0, -0.5f);
 
         if (Input::isMouseButtonDown(GLFW_MOUSE_BUTTON_MIDDLE)) {
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
@@ -1132,11 +1150,12 @@ private:
             index++;
         }
         
+        ImGui::Checkbox("enableSmoothNormals", &sceneRenderState.smoothNormals);
+        ImGui::Checkbox("enableTextures", &sceneRenderState.enableTextures);
+        ImGui::Text("useTexture = %d", sceneRenderState.enableTextures);
 
-        ImGui::Checkbox("enableSmoothNormals", &objRenderState.smoothNormals);
-
-        ImGui::DragFloat3("Direction", &objRenderState.lightDir.x, 0.01f, -10.0f, 10.0f);
-        ImGui::DragFloat3("Color", &objRenderState.lightColor.x, 0.01f, 0.0f, 1.0f);
+        ImGui::DragFloat3("Direction", &sceneRenderState.lightDir.x, 0.01f, -10.0f, 10.0f);
+        ImGui::DragFloat3("Color", &sceneRenderState.lightColor.x, 0.01f, 0.0f, 1.0f);
 
         ImGui::End();
     }

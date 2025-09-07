@@ -9,6 +9,9 @@ layout(binding = 0) uniform UniformBufferObject{
     vec4 lightColor;
 } ubo;
 
+layout(push_constant) uniform PushConstants{
+    int useTexture;
+} pc;
 
 layout(location = 0) in vec3 fragColor;
 layout(location = 1) in vec3 fragNormal;
@@ -27,9 +30,16 @@ void main(){
 
     vec3 texColor = texture(texSampler, fragTexCoord).rgb;
 
-    vec3 diffuse = diffuseFactor * ubo.lightColor.rgb * texColor;
+    vec3 diffuse;
+    vec3 ambience;
 
-    vec3 ambience = 0.05 * texColor;
+    if(pc.useTexture == 1) {
+        diffuse = diffuseFactor * ubo.lightColor.rgb * texColor;
+        ambience = 0.05 * texColor;
+    }else{
+        diffuse = diffuseFactor * ubo.lightColor.rgb * fragColor;
+        ambience = 0.05 * fragColor;
+    }
 
     outColor = vec4((diffuse + ambience), 1.0);
 }

@@ -6,7 +6,11 @@
 #include <string>
 #include <iostream>
 
+#include <json-develop/single_include/nlohmann/json.hpp>
+
 #include "Vertex.h"
+
+using json = nlohmann::json;
 
 struct ModelAttribs {
 	size_t trisCount;
@@ -49,6 +53,8 @@ public:
 	void cleanup(VkDevice device);
 
 private:
+	const std::string modelName;
+
 	std::vector<Vertex> vertices;
 	std::vector<uint32_t> indices;
 
