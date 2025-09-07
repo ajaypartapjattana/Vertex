@@ -8,6 +8,12 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
+//json toJson() const {
+//    return{
+//        {'position',}
+//    }
+//}
+
 Model::~Model(){}
 
 void Model::loadFromFile(const std::string& path) {
