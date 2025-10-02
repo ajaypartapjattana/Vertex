@@ -8,13 +8,48 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
-//json toJson() const {
-//    return{
-//        {'position',}
-//    }
-//}
-
 Model::~Model(){}
+
+json Model::toJson() const {
+    return{
+        {"name", modelName},
+        {"position",{modelTransforms.position.x, modelTransforms.position.y, modelTransforms.position.z}},
+        {"rotation",{modelTransforms.rotation.x, modelTransforms.rotation.y, modelTransforms.rotation.z}},
+        {"scale",{modelTransforms.scale.x, modelTransforms.scale.y, modelTransforms.scale.z}}
+    };
+}
+
+void Model::fromJson(const json& j) {
+    modelName = j.at("name").get<std::string>();
+
+    auto pos = j.at("position").get<std::vector<float>>();
+    modelTransforms.position = { pos[0], pos[1], pos[2] };
+
+    auto rot = j.at("rotation").get<std::vector<float>>();
+    modelTransforms.rotation = { rot[0], rot[1], rot[2] };
+
+    auto scl = j.at("scale").get<std::vector<float>>();
+    modelTransforms.scale = { scl[0], scl[1], scl[2] };
+}
+
+void Model::metaSave(const std::string& filePath) const{
+    std::ofstream file(filePath);
+    if (!file.is_open()) {
+        throw std::runtime_error("model metadata not saved." + filePath);
+    }
+    file << toJson().dump(4);
+}
+
+void Model::metaLoad(const std::string& filePath) {
+    std::ifstream file(filePath);
+    if (!file.is_open()) {
+        throw std::runtime_error("failed to retrieve model metadata" + filePath);
+    }
+    json j;
+    file >> j;
+    fromJson(j);
+}
+
 
 void Model::loadFromFile(const std::string& path) {
     tinyobj::attrib_t attrib;
@@ -93,7 +128,7 @@ void Model::createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkCom
     memcpy(data, indices.data(), (size_t)bufferSize);
     vkUnmapMemory(device, stagingBufferMemory);
 
-    VulkanUtils::createBuffer(physicalDevice, device, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, indexBuffer, indexBufferMemory);
+    VulkanUtils::createBuffer(physicalDevice, device, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory);
 
     VulkanUtils::copyBuffer(commandPool, device, stagingBuffer, indexBuffer, bufferSize, queue);
 
@@ -281,3 +316,6 @@ void Model::cleanup(VkDevice device) {
 
 //-to add custom per vert Normal genration function.
 //-to implement spatial hashing to handle larger models.
+
+//-added model attributes storage support.
+//-added vert normal interpolation.

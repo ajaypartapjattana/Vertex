@@ -38,9 +38,14 @@ public:
 	Model() = default;
 	~Model();
 
+	std::string modelName;
+	Transform modelTransforms;
 	ModelAttribs loadedModelAttributes;
 
-	Transform modelTransforms;
+	json toJson() const;
+	void fromJson(const json& j);
+	void metaSave(const std::string& filePath) const;
+	void metaLoad(const std::string& filePath);
 
 	void loadFromFile(const std::string& path);
 	void createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue);
@@ -53,7 +58,6 @@ public:
 	void cleanup(VkDevice device);
 
 private:
-	const std::string modelName;
 
 	std::vector<Vertex> vertices;
 	std::vector<uint32_t> indices;

@@ -4,6 +4,7 @@
 #include <memory>
 #include <vector>
 #include <string>
+#include <fstream>
 
 class ModelManager {
 public:
@@ -13,6 +14,8 @@ public:
 	void cleanUp(VkDevice device);
 	Model* getModel(size_t index);
 	std::vector<std::unique_ptr<Model>>& getModelList();
+	void saveModelMeta();
+	void loadModelMeta();
 
 private:
 	std::vector<std::unique_ptr<Model>> models;

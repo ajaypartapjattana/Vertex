@@ -37,3 +37,31 @@ Model* ModelManager::getModel(size_t index) {
 std::vector<std::unique_ptr<Model>>& ModelManager::getModelList() {
 	return models;
 }
+
+void ModelManager::saveModelMeta() {
+	json jAll = json::array();
+
+	for (auto& model : models) {
+		jAll.push_back(model->toJson());
+	}
+
+	std::ofstream file("models/models.json");
+	file << jAll.dump(4);
+}
+
+void ModelManager::loadModelMeta() {
+	std::ifstream file("models/models.json");
+	if (!file.is_open()) {
+		throw std::runtime_error("failed to gather metadata!");
+	}
+	json jall;
+	file >> jall;
+
+	models.clear();
+
+	for (const auto& jModel : jall) {
+		auto model = std::make_unique<Model>();
+		model->fromJson(jModel);
+		models.push_back(std::move(model));
+	}
+}
