@@ -27,9 +27,9 @@
 #include <unordered_map>
 
 #include "renderer/pipelineBuilder.h"
-#include "Input.h"
+#include "Controllers/Input.h"
 #include "ImGuiLayer.h"
-#include "Camera.h"
+#include "Controllers/Camera.h"
 #include "ModelManager.h"
 #include "Vertex.h"
 #include "VulkanUtils.h"
@@ -452,6 +452,7 @@ private:
 
         VkPhysicalDeviceFeatures deviceFeatures{};
         deviceFeatures.samplerAnisotropy = VK_TRUE;
+        deviceFeatures.fillModeNonSolid = VK_TRUE;
 
         VkDeviceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -762,8 +763,8 @@ private:
 
         renderFill_Pipeline = pipelineBuilder.buildPipeline(device);
 
-        /*pipelineBuilder.setDefaultRasterizer(VK_POLYGON_MODE_LINE);
-        renderEdge_Pipeline = pipelineBuilder.buildPipeline(device);*/
+        pipelineBuilder.setDefaultRasterizer(VK_POLYGON_MODE_LINE);
+        renderEdge_Pipeline = pipelineBuilder.buildPipeline(device);
 
         vkDestroyShaderModule(device, vertShaderModule, nullptr);
         vkDestroyShaderModule(device, fragShaderModule, nullptr);
@@ -866,8 +867,6 @@ private:
 
         vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderFill_Pipeline);
-
         VkViewport viewport{};
         viewport.x = 0.0f;
         viewport.y = 0.0f;
@@ -882,10 +881,16 @@ private:
         scissor.extent = swapChainExtent;
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderFill_Pipeline);
         PushConstants pc{};
         pc.useTexture = (sceneRenderState.enableTextures) ? 1 : 0;
         vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pc);
+        modelManager.drawAll(commandBuffer, pipelineLayout, currentFrame);
 
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderEdge_Pipeline);
+        PushConstants pcWireframe{};
+        pcWireframe.useTexture = 0;
+        vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pcWireframe);
         modelManager.drawAll(commandBuffer, pipelineLayout, currentFrame);
 
         imgui.endFrame(commandBuffers[currentFrame]);

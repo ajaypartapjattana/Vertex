@@ -24,7 +24,7 @@
     <ProjectGuid>{85339542-307d-4a9f-8336-867845f9631e}</ProjectGuid>
     <RootNamespace>ConsoleApplication1</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
-    <ProjectName>Rendum</ProjectName>
+    <ProjectName>Vertex</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -138,7 +138,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="Camera.cpp" />
+    <ClCompile Include="Controllers\Camera.cpp" />
+    <ClCompile Include="Controllers\transformController.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="ImGuiLayer.cpp" />
     <ClCompile Include="imgui\backends\imgui_impl_glfw.cpp" />
@@ -147,16 +148,17 @@
     <ClCompile Include="imgui\imgui_draw.cpp" />
     <ClCompile Include="imgui\imgui_tables.cpp" />
     <ClCompile Include="imgui\imgui_widgets.cpp" />
-    <ClCompile Include="Input.cpp" />
+    <ClCompile Include="Controllers\Input.cpp" />
     <ClCompile Include="model.cpp" />
     <ClCompile Include="ModelManager.cpp" />
     <ClCompile Include="renderer\PipelineBuilder.cpp" />
     <ClCompile Include="VulkanUtils.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Camera.h" />
+    <ClInclude Include="Controllers\Camera.h" />
+    <ClInclude Include="Controllers\transformController.h" />
     <ClInclude Include="ImGuiLayer.h" />
-    <ClInclude Include="Input.h" />
+    <ClInclude Include="Controllers\Input.h" />
     <ClInclude Include="model.h" />
     <ClInclude Include="ModelManager.h" />
     <ClInclude Include="renderer\pipelineBuilder.h" />
