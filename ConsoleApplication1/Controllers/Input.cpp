@@ -90,3 +90,11 @@ glm::vec2 Input::getScrollDelta() {
 	scrollDelta = glm::vec2(0.0f);
 	return delta;
 }
+
+float Input::getDeltaTime() {
+	static auto lastTime = std::chrono::high_resolution_clock::now();
+	auto currentTime = std::chrono::high_resolution_clock::now();
+	std::chrono::duration<float> deltaTime = currentTime - lastTime;
+	lastTime = currentTime;
+	return deltaTime.count();
+}

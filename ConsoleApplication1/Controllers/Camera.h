@@ -3,11 +3,17 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include "Input.h"
+
 class Camera
 {
 public:
 	Camera(glm::vec3 position, float aspectRatio);
 
+	//camera handler:
+	void handleCamera(GLFWwindow* window);
+
+	//camera helpers:
 	void setAspectRatio(float aspect);
 
 	void moveForward(float delta);

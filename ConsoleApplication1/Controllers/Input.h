@@ -3,6 +3,7 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <unordered_map>
+#include <chrono>
 
 class Input
 {
@@ -26,6 +27,9 @@ public:
 	static void scrollCallBack(GLFWwindow* window, double xoffset, double yoffset);
 	static void mouseButtonCallBack(GLFWwindow* window, int button, int action, int mods);
 	static void cursorPosCallBack(GLFWwindow* window, double xpos, double ypos);
+
+	//synchronoization Util-func
+	static float getDeltaTime();
 
 private:
 	static std::unordered_map<int, bool> keys;

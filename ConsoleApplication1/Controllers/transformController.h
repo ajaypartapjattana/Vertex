@@ -22,8 +22,8 @@ enum class TransformAxis{
 class TransformController{
 public:
 	TransformController();
-	void update(glm::vec3& objectPosition, glm::vec3& objectRotation, glm::vec3& objectScale, float deltaTime);
-	void setMode(TransformMode mode);
+
+	void handletransforms(glm::vec3& objectPosition, glm::vec3& objectRotation, glm::vec3& objectScale);
 
 private:
 	TransformMode currentMode;
@@ -32,6 +32,15 @@ private:
 	glm::vec2 prevMousePos;
 	bool dragging;
 
+	glm::vec3* targetPosition;
+	glm::vec3* targetRotation;
+	glm::vec3* targetScale;
+
+	glm::vec3 objInitialPosition;
+	glm::vec3 objInitialRotation;
+	glm::vec3 objInitialScale;
+
+	void setMode(TransformMode mode, glm::vec3& objectPosition, glm::vec3& objectRotation, glm::vec3& objectScale);
 	TransformAxis getAxisFromInput();
 	void applyTranslation(glm::vec3& position, const glm::vec2& mouseDelta);
 	void applyRotation(glm::vec3& rotation, const glm::vec2& mouseDelta);

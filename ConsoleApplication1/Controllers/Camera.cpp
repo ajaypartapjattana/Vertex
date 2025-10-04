@@ -1,4 +1,5 @@
 #include "Camera.h"
+#include "Input.h"
 
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -12,6 +13,38 @@ Camera::Camera(glm::vec3 position, float aspectRatio) :
 	nearPlane(0.1f),
 	farPlane(100.0f) {
 	updateCameraVectors();
+}
+
+void Camera::handleCamera(GLFWwindow* window) {
+	float deltaTime = Input::getDeltaTime();
+
+	float moveSpeed = 2.0f * deltaTime;
+	float cameraSensitivity = 0.25f * (getCameraFov() / 90.0f);
+	glm::vec2 scrollDelta = Input::getScrollDelta();
+	if (scrollDelta.y != 0) {
+		zoom(scrollDelta.y * 1000.0f * moveSpeed);
+	}
+
+	if (Input::isKeyDown(GLFW_KEY_W)) moveForward(moveSpeed);
+	if (Input::isKeyDown(GLFW_KEY_S)) moveBackward(moveSpeed);
+	if (Input::isKeyDown(GLFW_KEY_D)) moveRight(moveSpeed);
+	if (Input::isKeyDown(GLFW_KEY_A)) moveLeft(moveSpeed);
+	if (Input::isKeyDown(GLFW_KEY_E)) moveUp(moveSpeed);
+	if (Input::isKeyDown(GLFW_KEY_Q)) moveDown(moveSpeed);
+
+	if (Input::isKeyDown(GLFW_KEY_RIGHT)) rotate(0.5f, 0);
+	if (Input::isKeyDown(GLFW_KEY_LEFT)) rotate(-0.5f, 0);
+	if (Input::isKeyDown(GLFW_KEY_UP)) rotate(0, 0.5f);
+	if (Input::isKeyDown(GLFW_KEY_DOWN)) rotate(0, -0.5f);
+
+	if (Input::isMouseButtonDown(GLFW_MOUSE_BUTTON_MIDDLE)) {
+		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+		glm::vec2 delta = Input::getMouseDelta();
+		rotate(delta.x * cameraSensitivity, delta.y * -cameraSensitivity);
+	}
+	else {
+		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+	}
 }
 
 void Camera::setAspectRatio(float a) {

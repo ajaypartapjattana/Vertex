@@ -27,9 +27,9 @@
 #include <unordered_map>
 
 #include "renderer/pipelineBuilder.h"
-#include "Controllers/Input.h"
 #include "ImGuiLayer.h"
 #include "Controllers/Camera.h"
+#include "Controllers/transformController.h"
 #include "ModelManager.h"
 #include "Vertex.h"
 #include "VulkanUtils.h"
@@ -100,19 +100,9 @@ struct PushConstants {
 class TriangleDrawApplication {
 public:
     void run() {
-        initWindow();
-        initVulkan();
-
-        Input::init(window);
-        createImGuiContext();
-
+        init();
         mainloop();
-
-        destroyImGuiContext();
-        if (sceneRenderState.saveModelData) {
-            modelManager.saveModelMeta();
-        }
-        cleanup();
+        dinit();
     }
 private:
     GLFWwindow* window;
@@ -159,16 +149,37 @@ private:
     VkImageView depthImageView;
 
     bool framebufferResized = false;
-    int selectedModelIndex;
 
     //External handlers:
 
     PipelineBuilder pipelineBuilder;
     ImGuiLayer imgui;
     ModelManager modelManager;
+    TransformController transformController;
     Camera camera{glm::vec3(2.0f, 2.0f, 2.0f), (float)swapChainExtent.width/swapChainExtent.width};
 
     RenderState sceneRenderState{ true, false, glm::vec3(0.5f, 1.0f, 0.3f), glm::vec3(1.0f, 1.0f, 1.0f) };
+
+    void init() {
+        initWindow();
+        initVulkan();
+        Input::init(window);
+        createImGuiContext();
+        modelManager.loadModel(MODEL_PATH_1, TEXTURE_PATH_1, device, physicalDevice, commandPool, graphicsQueue, MAX_FRAMES_IN_FLIGHT);
+        modelManager.loadModel(MODEL_PATH_2, TEXTURE_PATH_2, device, physicalDevice, commandPool, graphicsQueue, MAX_FRAMES_IN_FLIGHT);
+        modelManager.createModelDescriptorSets(device, descriptorSetLayout, MAX_FRAMES_IN_FLIGHT);
+        //modelManager.loadModelMeta();
+    }
+
+    void dinit() {
+        if (sceneRenderState.saveModelData) {
+            modelManager.saveModelMeta();
+        }
+        imgui.cleanup(device);
+        modelManager.cleanUp(device);
+        destroyVulkanContext();
+        destroyGlfwContext();
+    }
 
     void initWindow() {
         glfwInit();
@@ -197,10 +208,6 @@ private:
         createCommandPool();
         createDepthResources();
         createFramebuffers();
-        modelManager.loadModel(MODEL_PATH_1, TEXTURE_PATH_1, device, physicalDevice, commandPool, graphicsQueue, MAX_FRAMES_IN_FLIGHT);
-        modelManager.loadModel(MODEL_PATH_2, TEXTURE_PATH_2, device, physicalDevice, commandPool, graphicsQueue, MAX_FRAMES_IN_FLIGHT);
-        modelManager.createModelDescriptorSets(device, descriptorSetLayout, MAX_FRAMES_IN_FLIGHT);
-        //modelManager.loadModelMeta();
         createCommandBuffers();
         createSyncObjects();
     }
@@ -218,9 +225,6 @@ private:
         vkDeviceWaitIdle(device);
 
     }
-    void destroyImGuiContext() {
-        imgui.cleanup(device);
-    }
     void cleanupSwapChain() {
         vkDestroyImageView(device, depthImageView, nullptr);
         vkDestroyImage(device, depthImage, nullptr);
@@ -234,12 +238,10 @@ private:
         }
         vkDestroySwapchainKHR(device, swapChain, nullptr);
     }
-    void cleanup() {
+    void destroyVulkanContext() {
         cleanupSwapChain();
 
         vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
-
-        modelManager.cleanUp(device);
 
         vkDestroyPipeline(device, renderFill_Pipeline, nullptr);
         vkDestroyPipeline(device, renderEdge_Pipeline, nullptr);
@@ -262,9 +264,9 @@ private:
         }
         vkDestroySurfaceKHR(instance, surface, nullptr);
         vkDestroyInstance(instance, nullptr);
-
+    }
+    void destroyGlfwContext() {
         glfwDestroyWindow(window);
-
         glfwTerminate();
     }
 
@@ -1051,7 +1053,7 @@ private:
             ubo.lightDir = glm::vec4(glm::normalize(sceneRenderState.lightDir), 0.0f);
             ubo.lightColor = glm::vec4(sceneRenderState.lightColor, 1.0f);
 
-            ubo.selected = (index == selectedModelIndex) ? 1 : 0;
+            ubo.selected = (index == modelManager.selectedModelIndex) ? 1 : 0;
 
             model->updateUBO(device, ubo, currentImage);
             index++;
@@ -1059,44 +1061,10 @@ private:
     }
 
     void handleInputs() {
-        float deltaTime = getDeltaTime();
-
-        glm::vec2 scrollDelta =  Input::getScrollDelta();
-
-        float moveSpeed = 2.0f * deltaTime;
-        float cameraSensitivity = 0.25f * (camera.getCameraFov()/90.0f);
-        if (scrollDelta.y != 0) {
-            camera.zoom(scrollDelta.y * 1000.0f * moveSpeed);
-        }
-
-        if (Input::isKeyDown(GLFW_KEY_W)) camera.moveForward(moveSpeed);
-        if (Input::isKeyDown(GLFW_KEY_S)) camera.moveBackward(moveSpeed);
-        if (Input::isKeyDown(GLFW_KEY_D)) camera.moveRight(moveSpeed);
-        if (Input::isKeyDown(GLFW_KEY_A)) camera.moveLeft(moveSpeed);
-        if (Input::isKeyDown(GLFW_KEY_E)) camera.moveUp(moveSpeed);
-        if (Input::isKeyDown(GLFW_KEY_Q)) camera.moveDown(moveSpeed);
-
-        if (Input::isKeyDown(GLFW_KEY_RIGHT)) camera.rotate(0.5f, 0);
-        if (Input::isKeyDown(GLFW_KEY_LEFT)) camera.rotate(-0.5f, 0);
-        if (Input::isKeyDown(GLFW_KEY_UP)) camera.rotate(0, 0.5f);
-        if (Input::isKeyDown(GLFW_KEY_DOWN)) camera.rotate(0, -0.5f);
-
-        if (Input::isMouseButtonDown(GLFW_MOUSE_BUTTON_MIDDLE)) {
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-            glm::vec2 delta = Input::getMouseDelta();
-            camera.rotate(delta.x * cameraSensitivity, delta.y * -cameraSensitivity);
-        }else {
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-        }
+        camera.handleCamera(window);
+        auto& activeModel = modelManager.getModelList()[modelManager.selectedModelIndex];
+        transformController.handletransforms(activeModel->modelTransforms.position, activeModel->modelTransforms.rotation, activeModel->modelTransforms.scale);
         Input::update(window);
-    }
-
-    float getDeltaTime() {
-        static auto lastTime = std::chrono::high_resolution_clock::now();
-        auto currentTime = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<float> deltaTime = currentTime - lastTime;
-        lastTime = currentTime;
-        return deltaTime.count();
     }
 
     void buildUI() {
@@ -1111,8 +1079,7 @@ private:
                 ImGui::PushID(index);
 
                 if (ImGui::RadioButton("Select", model->isSelected)) {
-                    selectedModelIndex = index;
-                    std::cout << selectedModelIndex << std::endl;
+                    modelManager.selectedModelIndex = index;
                 }
                 ImGui::DragFloat3("Position", &model->modelTransforms.position.x, 0.01f, -2.0f, 2.0f);
                 ImGui::DragFloat3("Rotation", &model->modelTransforms.rotation.x, 0.5f, -180.0f, 180.0f);
