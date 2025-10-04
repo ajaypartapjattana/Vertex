@@ -7,6 +7,9 @@ layout(binding = 0) uniform UniformBufferObject{
 
     vec4 lightDir;
     vec4 lightColor;
+
+    int selected;
+    vec3 _pad;
 } ubo;
 
 layout(push_constant) uniform PushConstants{
@@ -41,5 +44,11 @@ void main(){
         ambience = 0.05 * fragColor;
     }
 
-    outColor = vec4((diffuse + ambience), 1.0);
+    vec3 finalColor = diffuse + ambience;
+
+    if(ubo.selected == 1){
+        finalColor = mix(finalColor, vec3(1.0,1.0,0.0), 0.5);
+    }
+
+    outColor = vec4(finalColor, 1.0);
 }

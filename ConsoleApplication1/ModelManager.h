@@ -17,6 +17,8 @@ public:
 	void saveModelMeta();
 	void loadModelMeta();
 
+	int selectedModelIndex = -1;
+
 private:
 	std::vector<std::unique_ptr<Model>> models;
 };

@@ -31,6 +31,8 @@ struct UniformBufferObject {
 
 	alignas(16) glm::vec4 lightDir;
 	alignas(16) glm::vec4 lightColor;
+
+	alignas(16) int selected;
 };
 
 class Model {
@@ -41,6 +43,8 @@ public:
 	std::string modelName;
 	Transform modelTransforms;
 	ModelAttribs loadedModelAttributes;
+
+	bool isSelected = 0;
 
 	json toJson() const;
 	void fromJson(const json& j);

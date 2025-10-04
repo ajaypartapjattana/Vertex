@@ -133,8 +133,6 @@ private:
 
     std::vector<VkImageView> swapChainImageViews;
 
-    PipelineBuilder pipelineBuilder;
-
     VkRenderPass renderPass;
     VkDescriptorSetLayout descriptorSetLayout;
     VkPipelineLayout pipelineLayout;
@@ -161,14 +159,16 @@ private:
     VkImageView depthImageView;
 
     bool framebufferResized = false;
+    int selectedModelIndex;
 
+    //External handlers:
+
+    PipelineBuilder pipelineBuilder;
     ImGuiLayer imgui;
-
-    RenderState sceneRenderState{ true, false, glm::vec3(0.5f, 1.0f, 0.3f), glm::vec3(1.0f, 1.0f, 1.0f) };
-
+    ModelManager modelManager;
     Camera camera{glm::vec3(2.0f, 2.0f, 2.0f), (float)swapChainExtent.width/swapChainExtent.width};
 
-    ModelManager modelManager;
+    RenderState sceneRenderState{ true, false, glm::vec3(0.5f, 1.0f, 0.3f), glm::vec3(1.0f, 1.0f, 1.0f) };
 
     void initWindow() {
         glfwInit();
@@ -1035,6 +1035,7 @@ private:
     }
 
     void updateUniformBuffer(uint32_t currentImage) {
+        int index = 0;
         for (auto& model : modelManager.getModelList()) {
             UniformBufferObject ubo{};
 
@@ -1050,7 +1051,10 @@ private:
             ubo.lightDir = glm::vec4(glm::normalize(sceneRenderState.lightDir), 0.0f);
             ubo.lightColor = glm::vec4(sceneRenderState.lightColor, 1.0f);
 
+            ubo.selected = (index == selectedModelIndex) ? 1 : 0;
+
             model->updateUBO(device, ubo, currentImage);
+            index++;
         }
     }
 
@@ -1102,10 +1106,18 @@ private:
 
         int index = 0;
         for (auto& model : modelManager.getModelList()) {
-            if (ImGui::CollapsingHeader(("Model" + std::to_string(index)).c_str())) {
+            std::string header = "Model" + std::to_string(index);
+            if (ImGui::CollapsingHeader(header.c_str())) {
+                ImGui::PushID(index);
+
+                if (ImGui::RadioButton("Select", model->isSelected)) {
+                    selectedModelIndex = index;
+                    std::cout << selectedModelIndex << std::endl;
+                }
                 ImGui::DragFloat3("Position", &model->modelTransforms.position.x, 0.01f, -2.0f, 2.0f);
                 ImGui::DragFloat3("Rotation", &model->modelTransforms.rotation.x, 0.5f, -180.0f, 180.0f);
                 ImGui::DragFloat3("Scale", &model->modelTransforms.scale.x, 0.01f, 0.1f, 2.0f);
+                ImGui::PopID();
             }
             index++;
         }
@@ -1116,7 +1128,7 @@ private:
         ImGui::Text("useTexture = %d", sceneRenderState.enableTextures);
 
         ImGui::DragFloat3("Direction", &sceneRenderState.lightDir.x, 0.01f, -10.0f, 10.0f);
-        ImGui::DragFloat3("Color", &sceneRenderState.lightColor.x, 0.01f, 0.0f, 1.0f);
+        ImGui::ColorEdit3("Color", &sceneRenderState.lightColor.x);
 
         ImGui::End();
     }
