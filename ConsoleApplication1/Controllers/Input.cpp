@@ -81,7 +81,6 @@ glm::vec2 Input::getMouseDelta() {
 	if (glm::length(delta) > MAX_DELTA) {
 		return glm::vec2(0.0f);
 	}
-
 	return delta;
 }
 
@@ -89,6 +88,25 @@ glm::vec2 Input::getScrollDelta() {
 	glm::vec2 delta = scrollDelta;
 	scrollDelta = glm::vec2(0.0f);
 	return delta;
+}
+
+glm::vec3 Input::getMouseWorldRay(const glm::vec2& mousePos, const glm::mat4& view, const glm::mat4& projection, int screenWidth, int screenHeight) {
+	float x = (2.0f * mousePos.x) / screenWidth - 1.0f;
+	float y = (2.0f * mousePos.y) / screenHeight - 1.0f;
+	glm::vec4 rayClip(x, y, -1.0f, 1.0f);
+	glm::vec4 rayEye = glm::inverse(projection) * rayClip;
+	rayEye = glm::vec4(rayEye.x, rayEye.y, -1.0f, 0.0f);
+	glm::vec3 rayWorld = glm::normalize(glm::vec3(glm::inverse(view) * rayEye));
+	return rayWorld;
+}
+
+bool Input::intersectRayPlane(const glm::vec3& rayOrigin, const glm::vec3& rayDir, const glm::vec3& planePoint, const glm::vec3& planeNormal, glm::vec3& intersectionPoint) {
+	float dotPNormal_RDir = glm::dot(planeNormal, rayDir);
+	if (fabs(dotPNormal_RDir) < 1e-6f) return false;
+	float intersection_RDis = glm::dot(planePoint - rayOrigin, planeNormal) / dotPNormal_RDir;
+	if (intersection_RDis < 0) return false;
+	intersectionPoint = rayOrigin + intersection_RDis * rayDir;
+	return true;
 }
 
 float Input::getDeltaTime() {

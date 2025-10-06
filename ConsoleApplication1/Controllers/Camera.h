@@ -10,25 +10,17 @@ class Camera
 public:
 	Camera(glm::vec3 position, float aspectRatio);
 
-	//camera handler:
+	//base camera handler:
 	void handleCamera(GLFWwindow* window);
 
-	//camera helpers:
+	//external camera helpers:
 	void setAspectRatio(float aspect);
-
-	void moveForward(float delta);
-	void moveBackward(float delta);
-	void moveRight(float delta);
-	void moveLeft(float delta);
-	void moveUp(float delta);
-	void moveDown(float delta);
-
-	void rotate(float yawDelta, float pitchDelta);
-	void zoom(float yOffset);
 
 	glm::mat4 getViewMatrix() const;
 	glm::mat4 getProjectionMatrix() const;
+
 	glm::vec3 getPosition() const { return position; }
+	glm::vec3 getForward() const { return front; }
 
 	float getCameraFov();
 
@@ -47,4 +39,14 @@ private:
 	float farPlane;
 
 	void updateCameraVectors();
+
+	void moveForward(float delta);
+	void moveBackward(float delta);
+	void moveRight(float delta);
+	void moveLeft(float delta);
+	void moveUp(float delta);
+	void moveDown(float delta);
+
+	void rotate(float yawDelta, float pitchDelta);
+	void zoom(float yOffset);
 };

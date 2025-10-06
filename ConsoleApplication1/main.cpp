@@ -155,8 +155,8 @@ private:
     PipelineBuilder pipelineBuilder;
     ImGuiLayer imgui;
     ModelManager modelManager;
-    TransformController transformController;
     Camera camera{glm::vec3(2.0f, 2.0f, 2.0f), (float)swapChainExtent.width/swapChainExtent.width};
+    TransformController transformController;
 
     RenderState sceneRenderState{ true, false, glm::vec3(0.5f, 1.0f, 0.3f), glm::vec3(1.0f, 1.0f, 1.0f) };
 
@@ -1061,9 +1061,15 @@ private:
     }
 
     void handleInputs() {
+        //if(!transformController.inTransformationState) camera.handleCamera(window); //to be enabled if implemented advanced movement/selection methods.
         camera.handleCamera(window);
-        auto& activeModel = modelManager.getModelList()[modelManager.selectedModelIndex];
-        transformController.handletransforms(activeModel->modelTransforms.position, activeModel->modelTransforms.rotation, activeModel->modelTransforms.scale);
+        if (modelManager.selectedModelIndex >= 0) {
+            transformController.setCamera(&camera);
+            transformController.screenWidth = swapChainExtent.width;
+            transformController.screenHeight = swapChainExtent.height;
+            auto& activeModel = modelManager.getModelList()[modelManager.selectedModelIndex];
+            transformController.handletransforms(activeModel->modelTransforms.position, activeModel->modelTransforms.rotation, activeModel->modelTransforms.scale);
+        }
         Input::update(window);
     }
 

@@ -8,9 +8,11 @@
 class Input
 {
 public:
+	//synchronizers:
 	static void init(GLFWwindow* window);
 	static void update(GLFWwindow* window);
 
+	//raw input functions:
 	static bool isKeyPressed(int key);
 	static bool isKeyDown(int key);
 	static bool isKeyReleased(int key);
@@ -23,6 +25,11 @@ public:
 	static glm::vec2 getMouseDelta();
 	static glm::vec2 getScrollDelta();
 
+	//derived input functions:
+	static glm::vec3 getMouseWorldRay(const glm::vec2& mousePos, const glm::mat4& view, const glm::mat4& projection, int screenWidth, int screenHeight);
+	static bool intersectRayPlane(const glm::vec3& rayOrigin, const glm::vec3& rayDir, const glm::vec3& planePoint, const glm::vec3& planeNormal, glm::vec3& intersectionPoint);
+
+	//system event latchers:
 	static void keyCallBack(GLFWwindow* window, int key, int scanCode, int action, int mods);
 	static void scrollCallBack(GLFWwindow* window, double xoffset, double yoffset);
 	static void mouseButtonCallBack(GLFWwindow* window, int button, int action, int mods);
