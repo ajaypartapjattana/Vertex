@@ -140,6 +140,7 @@
   <ItemGroup>
     <ClCompile Include="Controllers\Camera.cpp" />
     <ClCompile Include="Controllers\transformController.cpp" />
+    <ClCompile Include="Controllers\Utilities\vecMath.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="ImGuiLayer.cpp" />
     <ClCompile Include="imgui\backends\imgui_impl_glfw.cpp" />
@@ -157,6 +158,7 @@
   <ItemGroup>
     <ClInclude Include="Controllers\Camera.h" />
     <ClInclude Include="Controllers\transformController.h" />
+    <ClInclude Include="Controllers\Utilities\vecMath.h" />
     <ClInclude Include="ImGuiLayer.h" />
     <ClInclude Include="Controllers\Input.h" />
     <ClInclude Include="model.h" />

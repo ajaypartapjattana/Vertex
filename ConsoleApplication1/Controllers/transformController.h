@@ -41,22 +41,29 @@ private:
 
 	glm::vec2 prevMousePos;
 
-	glm::vec3* targetPosition;
-	glm::vec3* targetRotation;
-	glm::vec3* targetScale;
+	//glm::vec3* targetPosition;
+	//glm::vec3* targetRotation;
+	//glm::vec3* targetScale;
 
 	glm::vec3 objInitialPosition;
 	glm::vec3 objInitialRotation;
 	glm::vec3 objInitialScale;
 
-	void applyTranslation(glm::vec3& position, const glm::vec2& mousePos, const glm::vec2 mouseDelta);
-	void applyRotation(glm::vec3& rotation, const glm::vec2& mouseDelta);
+	glm::vec3 objCursorPointingVec;
+	bool has_objCursorPointingVec;
+
+	glm::vec2 objCursorRelativeVec;
+	bool has_objCursorRelativeVec;
+
+	void applyTranslation(glm::vec3& position, const glm::vec2& mousePos);
+	void applyRotation(glm::vec3& rotation, const glm::vec3 position, const glm::vec2& mouseDelta);
 	void applyScale(glm::vec3& scale, const glm::vec2& mouseDelta);
 
-	void configureTransformation(TransformMode mode, glm::vec3& objectPosition, glm::vec3& objectRotation, glm::vec3& objectScale);
 	bool getAxisFromInput();
 	bool getModeFromInput();
 
 	void captureObjState(glm::vec3& objectPosition, glm::vec3& objectRotation, glm::vec3& objectScale);
 	void resetObjState(glm::vec3& objectPosition, glm::vec3& objectRotation, glm::vec3& objectScale);
+
+
 };

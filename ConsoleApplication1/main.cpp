@@ -525,6 +525,9 @@ private:
         swapChainImageFormat = surfaceFormat.format;
         swapChainExtent = extent;
 
+        transformController.screenHeight = extent.height;
+        transformController.screenWidth = extent.width;
+
         imagesInFlight.resize(swapChainImages.size(), VK_NULL_HANDLE);
     }
     SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device) {
@@ -1065,8 +1068,6 @@ private:
         camera.handleCamera(window);
         if (modelManager.selectedModelIndex >= 0) {
             transformController.setCamera(&camera);
-            transformController.screenWidth = swapChainExtent.width;
-            transformController.screenHeight = swapChainExtent.height;
             auto& activeModel = modelManager.getModelList()[modelManager.selectedModelIndex];
             transformController.handletransforms(activeModel->modelTransforms.position, activeModel->modelTransforms.rotation, activeModel->modelTransforms.scale);
         }
