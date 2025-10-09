@@ -41,6 +41,7 @@ void TransformController::handletransforms(glm::vec3& objectPosition, glm::vec3&
 	if(inTransformationState) {
 		if (getAxisFromInput()) {
 			resetObjState(objectPosition, objectRotation, objectScale);
+			//std::cout << static_cast<int>(activeAxis) << std::endl;
 			has_objCursorPointingVec = false;
 		}
 
