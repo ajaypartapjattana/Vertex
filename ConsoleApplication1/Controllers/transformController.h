@@ -17,7 +17,10 @@ enum class TransformAxis{
 	NONE,
 	X,
 	Y,
-	Z
+	Z,
+	XY,
+	YZ,
+	ZX
 };
 
 class TransformController{
@@ -51,19 +54,18 @@ private:
 
 	glm::vec3 objCursorPointingVec;
 	bool has_objCursorPointingVec;
+	float objCursorPointingVecMag;
 
 	glm::vec2 objCursorRelativeVec;
 	bool has_objCursorRelativeVec;
 
 	void applyTranslation(glm::vec3& position, const glm::vec2& mousePos);
 	void applyRotation(glm::vec3& rotation, const glm::vec3 position, const glm::vec2& mouseDelta);
-	void applyScale(glm::vec3& scale, const glm::vec2& mouseDelta);
+	void applyScale(glm::vec3& scale, const glm::vec3 position, const glm::vec2& mousePos);
 
 	bool getAxisFromInput();
 	bool getModeFromInput();
 
 	void captureObjState(glm::vec3& objectPosition, glm::vec3& objectRotation, glm::vec3& objectScale);
 	void resetObjState(glm::vec3& objectPosition, glm::vec3& objectRotation, glm::vec3& objectScale);
-
-
 };
