@@ -11,7 +11,6 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/hash.hpp>
 
-#include <chrono>
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
@@ -24,7 +23,6 @@
 #include <limits>
 #include <optional>
 #include <set>
-#include <unordered_map>
 
 #include "renderer/pipelineBuilder.h"
 #include "ImGuiLayer.h"
@@ -1064,8 +1062,8 @@ private:
     }
 
     void handleInputs() {
-        //if(!transformController.inTransformationState) camera.handleCamera(window); //to be enabled if implemented advanced movement/selection methods.
-        camera.handleCamera(window);
+        if(!transformController.inTransformationState) camera.handleCamera(window);
+        //camera.handleCamera(window);
         if (modelManager.selectedModelIndex >= 0) {
             transformController.setCamera(&camera);
             auto& activeModel = modelManager.getModelList()[modelManager.selectedModelIndex];
