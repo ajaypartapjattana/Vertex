@@ -26,7 +26,7 @@ void TransformController::handletransforms(glm::vec3& objectPosition, glm::vec3&
 		currentMode = TransformMode::NONE;
 		activeAxis = TransformAxis::NONE;
 		has_objCursorPointingVec = false;
-		has_objCursorRelativeVec = true;
+		has_cursorRayInitialIntersection = false;
 		inTransformationState = false;
 		return;
 	} else if (Input::isKeyPressed(GLFW_KEY_ESCAPE) || Input::isMouseButtonPressed(GLFW_MOUSE_BUTTON_RIGHT)) {
@@ -34,14 +34,14 @@ void TransformController::handletransforms(glm::vec3& objectPosition, glm::vec3&
 		currentMode = TransformMode::NONE;
 		activeAxis = TransformAxis::NONE;
 		has_objCursorPointingVec = false;
-		has_objCursorRelativeVec = false;
+		has_cursorRayInitialIntersection = false;
 		inTransformationState = false;
 	}
 
 	if(inTransformationState) {
 		if (getAxisFromInput()) {
 			resetObjState(objectPosition, objectRotation, objectScale);
-			//std::cout << static_cast<int>(activeAxis) << std::endl;
+			has_cursorRayInitialIntersection = false;
 			has_objCursorPointingVec = false;
 		}
 
@@ -69,7 +69,7 @@ bool TransformController::getModeFromInput() {
 	bool newTransform = (currentMode == TransformMode::NONE);
 	if (Input::isKeyPressed(GLFW_KEY_G)) {
 		currentMode = TransformMode::TRANSLATE;
-		has_objCursorRelativeVec = false;
+		has_cursorRayInitialIntersection = false;
 		return newTransform;
 	}
 	if (Input::isKeyPressed(GLFW_KEY_R)) {
@@ -104,44 +104,66 @@ void TransformController::applyTranslation(glm::vec3& position, const glm::vec2&
 	glm::mat4 view = camera->getViewMatrix();
 	glm::mat4 projection = camera->getProjectionMatrix();
 	glm::vec3 cameraPos = camera->getPosition();
-	glm::vec3 cameraNplane = camera->getForward();
-	glm::vec3 planeNormalX(1.0f, 0.0f, 0.0f);
-	glm::vec3 planeNormalY(0.0f, 1.0f, 0.0f);
-	glm::vec3 planeNormalZ(0.0f, 0.0f, 1.0f);
 
-	/*if (!has_objCursorRelativeVec) {
-		glm::vec2 objScreenCoord = vecMath::getObjScreenCoord(position, view, projection, screenWidth, screenHeight);
-		objCursorRelativeVec = mousePos - objScreenCoord;
-		has_objCursorRelativeVec = true;
-		return;
-	}*/
-
-	glm::vec3 rayDir = vecMath::getMouseWorldRay(mousePos, view, projection, screenWidth, screenHeight);
-	glm::vec3 objPlaneIntersection;
-
-	switch(activeAxis) {
+	glm::vec3 planeNormal;
+	switch (activeAxis) {
 	case TransformAxis::NONE:
-		if (vecMath::intersectRayPlane(cameraPos, rayDir, position, cameraNplane, objPlaneIntersection)) position = objPlaneIntersection;
+		planeNormal = camera->getForward();
 		break;
 	case TransformAxis::X:
-		if (vecMath::intersectRayPlane(cameraPos, rayDir, position, planeNormalY, objPlaneIntersection)) position.x = objPlaneIntersection.x;
+		planeNormal = glm::vec3(0.0f, 1.0f, 0.0f);
 		break;
 	case TransformAxis::Y:
-		if (vecMath::intersectRayPlane(cameraPos, rayDir, position, planeNormalZ, objPlaneIntersection)) position.y = objPlaneIntersection.y;
+		planeNormal = glm::vec3(0.0f, 0.0f, 1.0f);
 		break;
 	case TransformAxis::Z:
-		if (vecMath::intersectRayPlane(cameraPos, rayDir, position, planeNormalX, objPlaneIntersection)) position.z = objPlaneIntersection.z;
+		planeNormal = glm::vec3(1.0f, 0.0f, 0.0f);
 		break;
 	case TransformAxis::XY:
-		if (vecMath::intersectRayPlane(cameraPos, rayDir, position, planeNormalZ, objPlaneIntersection)) position = glm::vec3(objPlaneIntersection.x, objPlaneIntersection.y, position.z);
+		planeNormal = glm::vec3(0.0f, 0.0f, 1.0f);
 		break;
 	case TransformAxis::YZ:
-		if (vecMath::intersectRayPlane(cameraPos, rayDir, position, planeNormalX, objPlaneIntersection)) position = glm::vec3(position.x, objPlaneIntersection.y, objPlaneIntersection.z);
+		planeNormal = glm::vec3(1.0f, 0.0f, 0.0f);
 		break;
 	case TransformAxis::ZX:
-		if (vecMath::intersectRayPlane(cameraPos, rayDir, position, planeNormalY, objPlaneIntersection)) position = glm::vec3(objPlaneIntersection.x, position.y, objPlaneIntersection.z);
+		planeNormal = glm::vec3(0.0f, 1.0f, 0.0f);
 		break;
-	default: break;
+	}
+
+	glm::vec3 rayDir = vecMath::getMouseWorldRay(mousePos, view, projection, screenWidth, screenHeight);
+
+	glm::vec3 objPlaneIntersection;
+	if (!vecMath::intersectRayPlane(cameraPos, rayDir, position, planeNormal, objPlaneIntersection)) return;
+	
+	if (!has_cursorRayInitialIntersection) {
+		cursorRayInitialIntersection = objPlaneIntersection;
+		has_cursorRayInitialIntersection = true;
+		return;
+	}
+	glm::vec3 translation = objPlaneIntersection - cursorRayInitialIntersection;
+
+	switch (activeAxis) {
+	case TransformAxis::NONE:
+		position = objInitialPosition + translation;
+		break;
+	case TransformAxis::X:
+		position = glm::vec3(objInitialPosition.x + translation.x, objInitialPosition.y, objInitialPosition.z);
+		break;
+	case TransformAxis::Y:
+		position = glm::vec3(objInitialPosition.x, objInitialPosition.y + translation.y, objInitialPosition.z);
+		break;
+	case TransformAxis::Z:
+		position = glm::vec3(objInitialPosition.x, objInitialPosition.y, objInitialPosition.z + translation.z);
+		break;
+	case TransformAxis::XY:
+		position = glm::vec3(objInitialPosition.x + translation.x, objInitialPosition.y + translation.y, objInitialPosition.z);
+		break;
+	case TransformAxis::YZ:
+		position = glm::vec3(objInitialPosition.x, objInitialPosition.y + translation.y, objInitialPosition.z + translation.z);
+		break;
+	case TransformAxis::ZX:
+		position = glm::vec3(objInitialPosition.x + translation.x, objInitialPosition.y, objInitialPosition.z + translation.z);
+		break;
 	}
 }
 
@@ -185,7 +207,7 @@ void TransformController::applyRotation(glm::vec3& rotation, const glm::vec3 pos
 		glm::vec3 axis = glm::cross(objCursorPointingVec, Norm_CursorPointingVec);
 		float sign = glm::dot(axis, rotationAxis) < 0.0f ? -1.0f : 1.0f;
 		float angle = glm::acos(glm::clamp(glm::dot(objCursorPointingVec, Norm_CursorPointingVec), -1.0f, 1.0f));
-		rotation = glm::degrees(angle) * rotationAxis * sign;
+		rotation = objInitialRotation + glm::degrees(angle) * rotationAxis * sign;
 	}
 }
 
@@ -193,60 +215,45 @@ void TransformController::applyScale(glm::vec3& scale, const glm::vec3 position,
 	glm::mat4 view = camera->getViewMatrix();
 	glm::mat4 projection = camera->getProjectionMatrix();
 	glm::vec3 cameraPos = camera->getPosition();
-	glm::vec3 scalingPlaneVec;
+	glm::vec3 scalingPlaneVec = camera->getForward();
 
+	glm::vec3 rayDir = vecMath::getMouseWorldRay(mousePos, view, projection, screenWidth, screenHeight);
+
+	glm::vec3 objPlaneIntersection;
+	if (!vecMath::intersectRayPlane(cameraPos, rayDir, position, scalingPlaneVec, objPlaneIntersection)) return;
+
+	glm::vec3 CursorPointingVec = vecMath::getCursorPointingVec(position, objPlaneIntersection);
+
+	if (!has_objCursorPointingVec) {
+		objCursorPointingVec = CursorPointingVec;
+		objCursorPointingVecMag = glm::length(CursorPointingVec);
+		has_objCursorPointingVec = true;
+		return;
+	}
+	float scaling = glm::length(CursorPointingVec) - objCursorPointingVecMag;
 	switch (activeAxis) {
 	case TransformAxis::NONE:
-		scalingPlaneVec = camera->getForward();
+		scale = objInitialScale + glm::vec3(scaling);
 		break;
 	case TransformAxis::X:
-		scalingPlaneVec = glm::vec3(1.0f, 0.0f, 0.0f);
+		scale.x = objInitialScale.x + scaling;
 		break;
 	case TransformAxis::Y:
-		scalingPlaneVec = glm::vec3(0.0f, 1.0f, 0.0f);
+		scale.y = objInitialScale.y + scaling;
 		break;
 	case TransformAxis::Z:
-		scalingPlaneVec = glm::vec3(0.0f, 0.0f, 1.0f);
+		scale.z = objInitialScale.z + scaling;
+		break;
+	case TransformAxis::XY:
+		scale = glm::vec3(objInitialScale.x + scaling, objInitialScale.y + scaling, objInitialScale.z);
+		break;
+	case TransformAxis::YZ:
+		scale = glm::vec3(objInitialScale.x, objInitialScale.y + scaling, objInitialScale.z + scaling);
+		break;
+	case TransformAxis::ZX:
+		scale = glm::vec3(objInitialScale.x + scaling, objInitialScale.y, objInitialScale.z + scaling);
 		break;
 	default: break;
-	}
-	glm::vec3 rayDir = vecMath::getMouseWorldRay(mousePos, view, projection, screenWidth, screenHeight);
-	glm::vec3 objPlaneIntersection;
-	glm::vec3 CursorPointingVec;
-	if (vecMath::intersectRayPlane(cameraPos, rayDir, position, scalingPlaneVec, objPlaneIntersection)) {
-		CursorPointingVec = vecMath::getCursorPointingVec(position, objPlaneIntersection);
-		if (!has_objCursorPointingVec) {
-			objCursorPointingVec = CursorPointingVec;
-			objCursorPointingVecMag = glm::length(CursorPointingVec);
-			has_objCursorPointingVec = true;
-			return;
-		}
-		float scaling = glm::length(CursorPointingVec) - objCursorPointingVecMag;
-		switch (activeAxis) {
-		case TransformAxis::NONE:
-			scale += glm::vec3(scaling);
-			break;
-		case TransformAxis::X:
-			scale.x += scaling;
-			break;
-		case TransformAxis::Y:
-			scale.y += scaling;
-			break;
-		case TransformAxis::Z:
-			scale.z += scaling;
-			break;
-		case TransformAxis::XY:
-			scale = glm::vec3(scale.x + scaling, scale.y + scaling, scale.z);
-			break;
-		case TransformAxis::YZ:
-			scale = glm::vec3(scale.x, scale.y + scaling, scale.z + scaling);
-			break;
-		case TransformAxis::ZX:
-			scale = glm::vec3(scale.x + scaling, scale.y, scale.z + scaling);
-			break;
-		default: break;
-		}
-		objCursorPointingVecMag = glm::length(CursorPointingVec);
 	}
 }
 

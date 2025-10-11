@@ -56,8 +56,8 @@ private:
 	bool has_objCursorPointingVec;
 	float objCursorPointingVecMag;
 
-	glm::vec2 objCursorRelativeVec;
-	bool has_objCursorRelativeVec;
+	glm::vec3 cursorRayInitialIntersection;
+	bool has_cursorRayInitialIntersection;
 
 	void applyTranslation(glm::vec3& position, const glm::vec2& mousePos);
 	void applyRotation(glm::vec3& rotation, const glm::vec3 position, const glm::vec2& mouseDelta);
