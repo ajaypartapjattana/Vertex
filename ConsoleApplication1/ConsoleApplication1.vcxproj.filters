@@ -45,13 +45,13 @@
     <ClCompile Include="Controllers\Camera.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="model.cpp">
+    <ClCompile Include="entityHandlers\model.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="ModelManager.cpp">
+    <ClCompile Include="entityHandlers\ModelManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="VulkanUtils.cpp">
+    <ClCompile Include="entityHandlers\utility\VulkanUtils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="renderer\PipelineBuilder.cpp">
@@ -74,16 +74,16 @@
     <ClInclude Include="Controllers\Camera.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="model.h">
+    <ClInclude Include="entityHandlers\model.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="ModelManager.h">
+    <ClInclude Include="entityHandlers\ModelManager.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Vertex.h">
+    <ClInclude Include="entityHandlers\utility\Vertex.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="VulkanUtils.h">
+    <ClInclude Include="entityHandlers\utility\VulkanUtils.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="renderer\pipelineBuilder.h">
@@ -93,6 +93,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Controllers\Utilities\vecMath.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="entityHandlers\commProtocols\threadCommProtocol.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

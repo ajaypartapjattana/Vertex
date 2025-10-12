@@ -8,7 +8,7 @@
 
 #include <json-develop/single_include/nlohmann/json.hpp>
 
-#include "Vertex.h"
+#include "utility/Vertex.h"
 
 using json = nlohmann::json;
 
@@ -45,6 +45,9 @@ public:
 	ModelAttribs loadedModelAttributes;
 
 	bool isSelected = 0;
+
+	std::string obj_path;
+	std::string texture_path;
 
 	json toJson() const;
 	void fromJson(const json& j);

@@ -23,14 +23,15 @@
 #include <limits>
 #include <optional>
 #include <set>
+#include<filesystem>
 
 #include "renderer/pipelineBuilder.h"
 #include "ImGuiLayer.h"
 #include "Controllers/Camera.h"
 #include "Controllers/transformController.h"
-#include "ModelManager.h"
-#include "Vertex.h"
-#include "VulkanUtils.h"
+#include "entityHandlers/ModelManager.h"
+#include "entityHandlers/utility/Vertex.h"
+#include "entityHandlers/utility/VulkanUtils.h"
 
 const uint32_t WIDTH = 1200;
 const uint32_t HEIGHT = 800;
@@ -163,9 +164,10 @@ private:
         initVulkan();
         Input::init(window);
         createImGuiContext();
-        modelManager.loadModel(MODEL_PATH_1, TEXTURE_PATH_1, device, physicalDevice, commandPool, graphicsQueue, MAX_FRAMES_IN_FLIGHT);
-        modelManager.loadModel(MODEL_PATH_2, TEXTURE_PATH_2, device, physicalDevice, commandPool, graphicsQueue, MAX_FRAMES_IN_FLIGHT);
-        modelManager.createModelDescriptorSets(device, descriptorSetLayout, MAX_FRAMES_IN_FLIGHT);
+        initTransformController();
+        modelManager.gatherModelData(MODEL_PATH_1, TEXTURE_PATH_1);
+        //modelManager.gatherModelData(MODEL_PATH_2, TEXTURE_PATH_2);
+        modelManager.updateLoadedModels(device, physicalDevice, commandPool, graphicsQueue, descriptorSetLayout, MAX_FRAMES_IN_FLIGHT);
         //modelManager.loadModelMeta();
     }
 
@@ -184,8 +186,31 @@ private:
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
         window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
+        glfwMakeContextCurrent(window);
         glfwSetWindowUserPointer(window, this);
+
+        glfwSetDropCallback(window, [](GLFWwindow* window, int count, const char** paths) {
+            auto* app = static_cast<TriangleDrawApplication*>(glfwGetWindowUserPointer(window));
+            app->onFileDrop(window, count, paths);
+            });
+
         glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
+    }
+    void onFileDrop(GLFWwindow* window, int count, const char** paths) {
+        for (int i = 0; i < count; i++) {
+            std::string filePath = paths[i];
+            std::cout << "Dropped file: " << filePath << std::endl;
+
+            std::filesystem::path path(filePath);
+            std::string ext = path.extension().string();
+            if (ext == ".obj" || ext == ".OBJ") {
+                std::string texPath = "textures/carTexture.png";
+                modelManager.requestLoad(filePath, texPath);
+                std::cout << "Queued model for loading: " << filePath << std::endl;
+            } else {
+                std::cout << "unsupported file type: " << ext << std::endl;
+            }
+        }
     }
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
         auto app = reinterpret_cast<TriangleDrawApplication*>(glfwGetWindowUserPointer(window));
@@ -213,9 +238,13 @@ private:
         QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
         imgui.init(instance, device, physicalDevice, indices.graphicsFamily.value(), graphicsQueue, renderPass, swapChainImages.size(), window);
     }
+    void initTransformController() {
+        transformController.setCamera(&camera);
+    }
     void mainloop() {
         while (!glfwWindowShouldClose(window)) {
             glfwPollEvents();
+            modelManager.update(device, physicalDevice, commandPool, graphicsQueue, descriptorSetLayout, MAX_FRAMES_IN_FLIGHT);
             handleInputs();
             buildUI();
             drawFrame();
@@ -1063,9 +1092,7 @@ private:
 
     void handleInputs() {
         if(!transformController.inTransformationState) camera.handleCamera(window);
-        //camera.handleCamera(window);
         if (modelManager.selectedModelIndex >= 0) {
-            transformController.setCamera(&camera);
             auto& activeModel = modelManager.getModelList()[modelManager.selectedModelIndex];
             transformController.handletransforms(activeModel->modelTransforms.position, activeModel->modelTransforms.rotation, activeModel->modelTransforms.scale);
         }

@@ -1,5 +1,5 @@
 #include "model.h"
-#include "VulkanUtils.h"
+#include "utility/VulkanUtils.h"
 
 #include <stdexcept>
 
