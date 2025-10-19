@@ -4,7 +4,7 @@
 #include <GLFW/glfw3.h>
 #include <imgui.h>
 
-class ImGuiLayer
+class GuiLayer
 {
 public:
 	void init(VkInstance instance, VkDevice device, VkPhysicalDevice physicalDevice, uint32_t queueFamily, VkQueue queue , VkRenderPass renderPass, size_t imageCount, GLFWwindow* window);
@@ -15,5 +15,5 @@ public:
 	void cleanup(VkDevice device);
 
 private:
-	VkDescriptorPool imGuiDescriptorPool = VK_NULL_HANDLE;
+	VkDescriptorPool GuiDescriptorPool = VK_NULL_HANDLE;
 };

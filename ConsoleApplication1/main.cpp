@@ -26,7 +26,7 @@
 #include<filesystem>
 
 #include "renderer/pipelineBuilder.h"
-#include "ImGuiLayer.h"
+#include "GuiLayer.h"
 #include "Controllers/Camera.h"
 #include "Controllers/transformController.h"
 #include "entityHandlers/ModelManager.h"
@@ -46,6 +46,10 @@ const int MAX_FRAMES_IN_FLIGHT = 2;
 
 const std::vector<const char*> validationLayers = { "VK_LAYER_KHRONOS_validation" };
 const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+
+enum DrawMode {
+    objectMode, wireframeMode
+};
 
 #ifdef NDEBUG
 const bool enableValidationLayers = false;
@@ -72,9 +76,8 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
 struct QueueFamilyIndices{
     std::optional<uint32_t> graphicsFamily;
     std::optional<uint32_t> presentFamily;
-    std::optional<uint32_t> transferFamily;
     bool isComplete() {
-        return graphicsFamily.has_value() && presentFamily.has_value() && transferFamily.has_value();
+        return graphicsFamily.has_value() && presentFamily.has_value();
     }
 };
 
@@ -86,6 +89,7 @@ struct SwapChainSupportDetails {
 
 struct RenderState {
     bool smoothNormals;
+    bool drawMode;
     bool enableTextures;
     glm::vec3 lightDir;
     glm::vec3 lightColor;
@@ -113,7 +117,6 @@ private:
 
     VkQueue graphicsQueue;
     VkQueue presentQueue;
-    VkQueue transferQueue;
 
     VkSwapchainKHR swapChain;
     std::vector<VkImage> swapChainImages;
@@ -149,15 +152,17 @@ private:
 
     bool framebufferResized = false;
 
+    DrawMode drawMode = DrawMode::objectMode;
+
     //External handlers:
 
     PipelineBuilder pipelineBuilder;
-    ImGuiLayer imgui;
+    GuiLayer gui;
     ModelManager modelManager;
     Camera camera{glm::vec3(2.0f, 2.0f, 2.0f), (float)swapChainExtent.width/swapChainExtent.width};
     TransformController transformController;
 
-    RenderState sceneRenderState{ true, false, glm::vec3(0.5f, 1.0f, 0.3f), glm::vec3(1.0f, 1.0f, 1.0f) };
+    RenderState sceneRenderState{ true, false, false, glm::vec3(0.5f, 1.0f, 0.3f), glm::vec3(1.0f, 1.0f, 1.0f) };
 
     void init() {
         initWindow();
@@ -175,7 +180,7 @@ private:
         if (sceneRenderState.saveModelData) {
             modelManager.saveModelMeta();
         }
-        imgui.cleanup(device);
+        gui.cleanup(device);
         modelManager.cleanUp(device);
         destroyVulkanContext();
         destroyGlfwContext();
@@ -236,7 +241,7 @@ private:
     }
     void createImGuiContext() {
         QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
-        imgui.init(instance, device, physicalDevice, indices.graphicsFamily.value(), graphicsQueue, renderPass, swapChainImages.size(), window);
+        gui.init(instance, device, physicalDevice, indices.graphicsFamily.value(), graphicsQueue, renderPass, swapChainImages.size(), window);
     }
     void initTransformController() {
         transformController.setCamera(&camera);
@@ -296,7 +301,6 @@ private:
         glfwDestroyWindow(window);
         glfwTerminate();
     }
-
 
     void createInstance() {
         if (enableValidationLayers && !checkValidationLayerSupport()) {
@@ -412,6 +416,11 @@ private:
         }
     }
     bool isDeviceSuitable(VkPhysicalDevice device) {
+        VkPhysicalDeviceProperties deviceProperties;
+        vkGetPhysicalDeviceProperties(device, &deviceProperties);
+
+        std::cout << std::endl << "active : " << deviceProperties.deviceName << std::endl;
+
         QueueFamilyIndices indices = findQueueFamilies(device);
         bool extensionSupported = checkDeviceExtensionSupport(device);
         bool swapChainAdequate = false;
@@ -421,6 +430,15 @@ private:
         }
         VkPhysicalDeviceFeatures supportedFeatures;
         vkGetPhysicalDeviceFeatures(device, &supportedFeatures);
+
+        if (indices.isComplete() && extensionSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy) return true;
+
+        std::cout << std::endl;
+        if (!extensionSupported) std::cout << "required extensions not supported!" << std::endl;
+        if (!indices.isComplete()) std::cout << "queueIndices incomplete!" << std::endl;
+        if (!supportedFeatures.samplerAnisotropy) std::cout << "sampler anisotropy not supported!" << std::endl;
+        if (!swapChainAdequate) std::cout << "swapChain inadequate!" << std::endl;
+        std::cout << std::endl << "active GPU not suitable!" << std::endl;
 
         return indices.isComplete() && extensionSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy;
     }
@@ -434,8 +452,6 @@ private:
         for (const auto& queueFamily : queueFamilies) {
             if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
                 indices.graphicsFamily = i;
-            }else if(queueFamily.queueFlags & VK_QUEUE_TRANSFER_BIT){
-                indices.transferFamily = i;
             }
             VkBool32 presentSupport = false;
             vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
@@ -461,13 +477,21 @@ private:
         for (const auto& extension : availableExtensions) {
             requiredExtensions.erase(extension.extensionName);
         }
-        return requiredExtensions.empty();
+
+        if (requiredExtensions.empty()) return true;
+
+        std::cout << "MISSING EXTENSIONS:" << std::endl;
+        for (const auto& extension : requiredExtensions) {
+            std::cout << extension << std::endl;
+        }
+
+        return false;
     }
     void createLogicalDevice() {
         QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
 
         std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
-        std::set<uint32_t> uniqueQueueFamilies = {indices.graphicsFamily.value(), indices.presentFamily.value(), indices.transferFamily.value()};
+        std::set<uint32_t> uniqueQueueFamilies = { indices.graphicsFamily.value(), indices.presentFamily.value() };
 
         float queuePriority = 1.0f;
         for (uint32_t queueFamily : uniqueQueueFamilies) {
@@ -502,7 +526,6 @@ private:
         }
         vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
         vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
-        vkGetDeviceQueue(device, indices.transferFamily.value(), 0, &transferQueue);
     }
     void createSwapChain() {
         SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice);
@@ -853,12 +876,6 @@ private:
         if (vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool) != VK_SUCCESS) {
             throw std::runtime_error("failed to create command pool!");
         }
-        poolInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-        poolInfo.queueFamilyIndex = queueFamilyIndices.transferFamily.value();
-
-        if (vkCreateCommandPool(device, &poolInfo, nullptr, &transferQueueCommandPool) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create transfer command pool!");
-        }
     }
     void createCommandBuffers() {
         commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
@@ -913,19 +930,24 @@ private:
         scissor.extent = swapChainExtent;
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderFill_Pipeline);
+        switch (drawMode) {
+        case objectMode:
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderFill_Pipeline);
+            break;
+        case wireframeMode:
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderEdge_Pipeline);
+            break;
+        default:
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderFill_Pipeline);
+        }
+
         PushConstants pc{};
         pc.useTexture = (sceneRenderState.enableTextures) ? 1 : 0;
         vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pc);
+
         modelManager.drawAll(commandBuffer, pipelineLayout, currentFrame);
 
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderEdge_Pipeline);
-        PushConstants pcWireframe{};
-        pcWireframe.useTexture = 0;
-        vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pcWireframe);
-        modelManager.drawAll(commandBuffer, pipelineLayout, currentFrame);
-
-        imgui.endFrame(commandBuffers[currentFrame]);
+        gui.endFrame(commandBuffers[currentFrame]);
 
         vkCmdEndRenderPass(commandBuffer);
 
@@ -1100,7 +1122,7 @@ private:
     }
 
     void buildUI() {
-        imgui.beginFrame();
+        gui.beginFrame();
 
         ImGui::Begin("Controls");
 
@@ -1110,7 +1132,7 @@ private:
             if (ImGui::CollapsingHeader(header.c_str())) {
                 ImGui::PushID(index);
 
-                if (ImGui::RadioButton("Select", model->isSelected)) {
+                if (ImGui::Selectable("Select", model->isSelected)) {
                     modelManager.selectedModelIndex = index;
                 }
                 ImGui::DragFloat3("Position", &model->modelTransforms.position.x, 0.01f, -2.0f, 2.0f);
@@ -1121,10 +1143,17 @@ private:
             index++;
         }
         
+        const char* currentModeName = (drawMode == DrawMode::objectMode) ? "Object mode" : "Wireframe mode";
+
+        if (ImGui::BeginCombo("Select Mode", currentModeName)) {
+            if (ImGui::Selectable("Object mode", drawMode == DrawMode::objectMode)) drawMode = DrawMode::objectMode;
+            if (ImGui::Selectable("Wireframe mode", drawMode == DrawMode::wireframeMode)) drawMode = DrawMode::wireframeMode;
+            ImGui::EndCombo();
+        }
+
         ImGui::Checkbox("enableSmoothNormals", &sceneRenderState.smoothNormals);
-        ImGui::Checkbox("enableTextures", &sceneRenderState.enableTextures);
+        ImGui::Checkbox("Textures", &sceneRenderState.enableTextures);
         ImGui::Checkbox("saveData at termination", &sceneRenderState.saveModelData);
-        ImGui::Text("useTexture = %d", sceneRenderState.enableTextures);
 
         ImGui::DragFloat3("Direction", &sceneRenderState.lightDir.x, 0.01f, -10.0f, 10.0f);
         ImGui::ColorEdit3("Color", &sceneRenderState.lightColor.x);
@@ -1139,7 +1168,7 @@ int main() {
         App.run();
     }
     catch (const std::exception& e) {
-        std::cerr << e.what() << std::endl;
+        std::cerr << std::endl << e.what() << std::endl << std::endl << "EXECUTION ABORTED" << std::endl;
         return EXIT_FAILURE;
     }
 

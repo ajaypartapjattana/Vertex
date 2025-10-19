@@ -1,13 +1,13 @@
-#include "ImGuiLayer.h"
+#include "GuiLayer.h"
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_vulkan.h"
 
 #include <array>
 
-void ImGuiLayer::init(VkInstance instance, VkDevice device, VkPhysicalDevice physicalDevice, uint32_t queueFamily, VkQueue queue, VkRenderPass renderPass, size_t imageCount, GLFWwindow* window) {
+void GuiLayer::init(VkInstance instance, VkDevice device, VkPhysicalDevice physicalDevice, uint32_t queueFamily, VkQueue queue, VkRenderPass renderPass, size_t imageCount, GLFWwindow* window) {
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
-	ImGui::StyleColorsDark();
+	ImGui::StyleColorsClassic();
 
 	ImGui_ImplGlfw_InitForVulkan(window, true);
 
@@ -22,7 +22,7 @@ void ImGuiLayer::init(VkInstance instance, VkDevice device, VkPhysicalDevice phy
 	createInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
 	createInfo.pPoolSizes = poolSizes.data();
 
-	vkCreateDescriptorPool(device, &createInfo, nullptr, &imGuiDescriptorPool);
+	vkCreateDescriptorPool(device, &createInfo, nullptr, &GuiDescriptorPool);
 
 	ImGui_ImplVulkan_InitInfo initInfo{};
 	initInfo.Instance = instance;
@@ -30,28 +30,28 @@ void ImGuiLayer::init(VkInstance instance, VkDevice device, VkPhysicalDevice phy
 	initInfo.Device = device;
 	initInfo.QueueFamily = queueFamily;
 	initInfo.Queue = queue;
-	initInfo.DescriptorPool = imGuiDescriptorPool;
+	initInfo.DescriptorPool = GuiDescriptorPool;
 	initInfo.MinImageCount = static_cast<uint32_t>(imageCount);
 	initInfo.ImageCount = static_cast<uint32_t>(imageCount);
 	initInfo.RenderPass = renderPass;
 
 	ImGui_ImplVulkan_Init(&initInfo);
 }
-void ImGuiLayer::beginFrame() {
+void GuiLayer::beginFrame() {
 	ImGui_ImplVulkan_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
 }
 
-void ImGuiLayer::endFrame(VkCommandBuffer commandBuffer) {
+void GuiLayer::endFrame(VkCommandBuffer commandBuffer) {
 	ImGui::Render();
 	ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
 }
 
-void ImGuiLayer::cleanup(VkDevice device) {
+void GuiLayer::cleanup(VkDevice device) {
 	ImGui_ImplVulkan_Shutdown();
 	ImGui_ImplGlfw_Shutdown();
 	ImGui::DestroyContext();
 
-	vkDestroyDescriptorPool(device, imGuiDescriptorPool, nullptr);
+	vkDestroyDescriptorPool(device, GuiDescriptorPool, nullptr);
 }
