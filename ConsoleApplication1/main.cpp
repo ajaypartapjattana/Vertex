@@ -72,9 +72,8 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
 struct QueueFamilyIndices{
     std::optional<uint32_t> graphicsFamily;
     std::optional<uint32_t> presentFamily;
-    std::optional<uint32_t> transferFamily;
     bool isComplete() {
-        return graphicsFamily.has_value() && presentFamily.has_value() && transferFamily.has_value();
+        return graphicsFamily.has_value() && presentFamily.has_value();
     }
 };
 
@@ -113,7 +112,6 @@ private:
 
     VkQueue graphicsQueue;
     VkQueue presentQueue;
-    VkQueue transferQueue;
 
     VkSwapchainKHR swapChain;
     std::vector<VkImage> swapChainImages;
@@ -297,7 +295,6 @@ private:
         glfwTerminate();
     }
 
-
     void createInstance() {
         if (enableValidationLayers && !checkValidationLayerSupport()) {
             throw std::runtime_error("validation layers requested, but not available!");
@@ -412,6 +409,11 @@ private:
         }
     }
     bool isDeviceSuitable(VkPhysicalDevice device) {
+        VkPhysicalDeviceProperties deviceProperties;
+        vkGetPhysicalDeviceProperties(device, &deviceProperties);
+
+        std::cout << std::endl << "active : " << deviceProperties.deviceName << std::endl;
+
         QueueFamilyIndices indices = findQueueFamilies(device);
         bool extensionSupported = checkDeviceExtensionSupport(device);
         bool swapChainAdequate = false;
@@ -421,6 +423,15 @@ private:
         }
         VkPhysicalDeviceFeatures supportedFeatures;
         vkGetPhysicalDeviceFeatures(device, &supportedFeatures);
+
+        if (indices.isComplete() && extensionSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy) return true;
+
+        std::cout << std::endl;
+        if (!extensionSupported) std::cout << "required extensions not supported!" << std::endl;
+        if (!indices.isComplete()) std::cout << "queueIndices incomplete!" << std::endl;
+        if (!supportedFeatures.samplerAnisotropy) std::cout << "sampler anisotropy not supported!" << std::endl;
+        if (!swapChainAdequate) std::cout << "swapChain inadequate!" << std::endl;
+        std::cout << std::endl << "active GPU not suitable!" << std::endl;
 
         return indices.isComplete() && extensionSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy;
     }
@@ -434,8 +445,6 @@ private:
         for (const auto& queueFamily : queueFamilies) {
             if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
                 indices.graphicsFamily = i;
-            }else if(queueFamily.queueFlags & VK_QUEUE_TRANSFER_BIT){
-                indices.transferFamily = i;
             }
             VkBool32 presentSupport = false;
             vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
@@ -461,13 +470,21 @@ private:
         for (const auto& extension : availableExtensions) {
             requiredExtensions.erase(extension.extensionName);
         }
-        return requiredExtensions.empty();
+
+        if (requiredExtensions.empty()) return true;
+
+        std::cout << "MISSING EXTENSIONS:" << std::endl;
+        for (const auto& extension : requiredExtensions) {
+            std::cout << extension << std::endl;
+        }
+
+        return false;
     }
     void createLogicalDevice() {
         QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
 
         std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
-        std::set<uint32_t> uniqueQueueFamilies = {indices.graphicsFamily.value(), indices.presentFamily.value(), indices.transferFamily.value()};
+        std::set<uint32_t> uniqueQueueFamilies = { indices.graphicsFamily.value(), indices.presentFamily.value() };
 
         float queuePriority = 1.0f;
         for (uint32_t queueFamily : uniqueQueueFamilies) {
@@ -502,7 +519,6 @@ private:
         }
         vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
         vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
-        vkGetDeviceQueue(device, indices.transferFamily.value(), 0, &transferQueue);
     }
     void createSwapChain() {
         SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice);
@@ -853,12 +869,6 @@ private:
         if (vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool) != VK_SUCCESS) {
             throw std::runtime_error("failed to create command pool!");
         }
-        poolInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-        poolInfo.queueFamilyIndex = queueFamilyIndices.transferFamily.value();
-
-        if (vkCreateCommandPool(device, &poolInfo, nullptr, &transferQueueCommandPool) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create transfer command pool!");
-        }
     }
     void createCommandBuffers() {
         commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
@@ -1139,7 +1149,7 @@ int main() {
         App.run();
     }
     catch (const std::exception& e) {
-        std::cerr << e.what() << std::endl;
+        std::cerr << std::endl << e.what() << std::endl << std::endl << "EXECUTION ABORTED" << std::endl;
         return EXIT_FAILURE;
     }
 
