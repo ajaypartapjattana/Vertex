@@ -141,6 +141,7 @@
     <ClCompile Include="Controllers\Camera.cpp" />
     <ClCompile Include="Controllers\transformController.cpp" />
     <ClCompile Include="Controllers\Utilities\vecMath.cpp" />
+    <ClCompile Include="entityHandlers\world.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="GuiLayer.cpp" />
     <ClCompile Include="imgui\backends\imgui_impl_glfw.cpp" />
@@ -152,21 +153,22 @@
     <ClCompile Include="Controllers\Input.cpp" />
     <ClCompile Include="entityHandlers\model.cpp" />
     <ClCompile Include="entityHandlers\ModelManager.cpp" />
-    <ClCompile Include="renderer\PipelineBuilder.cpp" />
-    <ClCompile Include="entityHandlers\utility\VulkanUtils.cpp" />
+    <ClCompile Include="entityHandlers\renderer\utility\VulkanUtils.cpp" />
+    <ClCompile Include="entityHandlers\renderer\PipelineManager.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Controllers\Camera.h" />
     <ClInclude Include="Controllers\transformController.h" />
     <ClInclude Include="Controllers\Utilities\vecMath.h" />
+    <ClInclude Include="entityHandlers\world.h" />
     <ClInclude Include="GuiLayer.h" />
     <ClInclude Include="Controllers\Input.h" />
     <ClInclude Include="entityHandlers\model.h" />
     <ClInclude Include="entityHandlers\ModelManager.h" />
-    <ClInclude Include="renderer\pipelineBuilder.h" />
     <ClInclude Include="entityHandlers\commProtocols\threadCommProtocol.h" />
-    <ClInclude Include="entityHandlers\utility\Vertex.h" />
-    <ClInclude Include="entityHandlers\utility\VulkanUtils.h" />
+    <ClInclude Include="entityHandlers\renderer\utility\Vertex.h" />
+    <ClInclude Include="entityHandlers\renderer\utility\VulkanUtils.h" />
+    <ClInclude Include="entityHandlers\renderer\pipelineManager.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

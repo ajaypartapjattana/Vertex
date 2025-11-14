@@ -47,7 +47,15 @@ void ModelManager::cleanUp(VkDevice device) {
 	for (auto& model : models) {
 		model->cleanup(device);
 	}
+	selectedModels.clear();
 	models.clear();
+}
+
+void ModelManager::destroyModel(Model* model, VkDevice device) {
+	if (!model) return;
+	vkDeviceWaitIdle(device);
+	model->cleanup(device);
+	models.erase(std::remove_if(models.begin(), models.end(), [&](const std::unique_ptr<Model>& m) {return m.get() == model; }), models.end());
 }
 
 Model* ModelManager::getModel(size_t index) { 

@@ -51,16 +51,19 @@
     <ClCompile Include="entityHandlers\ModelManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="entityHandlers\utility\VulkanUtils.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="renderer\PipelineBuilder.cpp">
+    <ClCompile Include="entityHandlers\renderer\utility\VulkanUtils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Controllers\transformController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Controllers\Utilities\vecMath.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="entityHandlers\world.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="entityHandlers\renderer\PipelineManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -80,13 +83,10 @@
     <ClInclude Include="entityHandlers\ModelManager.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="entityHandlers\utility\Vertex.h">
+    <ClInclude Include="entityHandlers\renderer\utility\Vertex.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="entityHandlers\utility\VulkanUtils.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="renderer\pipelineBuilder.h">
+    <ClInclude Include="entityHandlers\renderer\utility\VulkanUtils.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Controllers\transformController.h">
@@ -96,6 +96,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="entityHandlers\commProtocols\threadCommProtocol.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="entityHandlers\world.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="entityHandlers\renderer\pipelineManager.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

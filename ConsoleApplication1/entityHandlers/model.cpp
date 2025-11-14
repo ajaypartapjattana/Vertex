@@ -1,5 +1,5 @@
 #include "model.h"
-#include "utility/VulkanUtils.h"
+#include "renderer/utility/VulkanUtils.h"
 
 #include <stdexcept>
 
@@ -187,7 +187,7 @@ void Model::createTexture(VkDevice device, VkPhysicalDevice physicalDevice, VkCo
 }
 
 void Model::createUniformBuffer(VkDevice device, VkPhysicalDevice physicalDevice, uint16_t MAX_FRAMES_IN_FLIGHT) {
-    VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+    VkDeviceSize bufferSize = sizeof(Model_UBO);
 
     uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
     uniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
@@ -199,7 +199,7 @@ void Model::createUniformBuffer(VkDevice device, VkPhysicalDevice physicalDevice
     }
 }
 
-void Model::updateUBO(VkDevice device, const UniformBufferObject& uboData, uint32_t currentImage) {
+void Model::updateUBO(VkDevice device, const Model_UBO& uboData, uint32_t currentImage) {
     memcpy(uniformBuffersMapped[currentImage], &uboData, sizeof(uboData));
 }
 
@@ -221,7 +221,7 @@ void Model::createDescriptorSet(VkDevice device, VkDescriptorSetLayout descripto
         VkDescriptorBufferInfo bufferInfo{};
         bufferInfo.buffer = uniformBuffers[i];
         bufferInfo.offset = 0;
-        bufferInfo.range = sizeof(UniformBufferObject);
+        bufferInfo.range = sizeof(Model_UBO);
 
         VkDescriptorImageInfo imageInfo{};
         imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -258,8 +258,7 @@ void Model::draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout,
     vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
     if (!descriptorSets.empty()) {
-        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout,
-            0, 1, &descriptorSets[currentFrame], 0, nullptr);
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
     }
 
     vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);

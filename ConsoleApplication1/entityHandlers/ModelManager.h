@@ -4,7 +4,7 @@
 #include <vector>
 #include <string>
 #include <fstream>
-
+#include <unordered_set>
 #include <thread>
 #include <atomic>
 #include <filesystem>
@@ -35,12 +35,13 @@ public:
 
 	void drawAll(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint16_t currentFrame);
 	void cleanUp(VkDevice device);
+	void destroyModel(Model* model, VkDevice device);
 	Model* getModel(size_t index);
 	std::vector<std::unique_ptr<Model>>& getModelList();
 	void saveModelMeta();
 	void loadModelMeta();
 
-	int selectedModelIndex = -1;
+	std::unordered_set<Model*> selectedModels;
 
 private:
 	std::vector<std::unique_ptr<Model>> models;

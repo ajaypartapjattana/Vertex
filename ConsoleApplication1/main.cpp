@@ -23,15 +23,16 @@
 #include <limits>
 #include <optional>
 #include <set>
-#include<filesystem>
+#include <filesystem>
 
-#include "renderer/pipelineBuilder.h"
+#include "entityHandlers/renderer/pipelineManager.h"
 #include "GuiLayer.h"
 #include "Controllers/Camera.h"
 #include "Controllers/transformController.h"
 #include "entityHandlers/ModelManager.h"
-#include "entityHandlers/utility/Vertex.h"
-#include "entityHandlers/utility/VulkanUtils.h"
+#include "entityHandlers/world.h"
+#include "entityHandlers/renderer/utility/Vertex.h"
+#include "entityHandlers/renderer/utility/VulkanUtils.h"
 
 const uint32_t WIDTH = 1200;
 const uint32_t HEIGHT = 800;
@@ -100,7 +101,7 @@ struct PushConstants {
     int useTexture;
 };
 
-class TriangleDrawApplication {
+class Vortx {
 public:
     void run() {
         init();
@@ -129,8 +130,8 @@ private:
     VkDescriptorSetLayout descriptorSetLayout;
     VkPipelineLayout pipelineLayout;
     
-    VkPipeline renderFill_Pipeline;
-    VkPipeline renderEdge_Pipeline;
+    PipelineHandle renderFill_Pipeline;
+    PipelineHandle renderEdge_Pipeline;
 
     std::vector<VkFramebuffer> swapChainFramebuffers;
 
@@ -156,9 +157,10 @@ private:
 
     //External handlers:
 
-    PipelineBuilder pipelineBuilder;
+    PipelineManager pipelineManager;
     GuiLayer gui;
     ModelManager modelManager;
+    std::unique_ptr<World> world;
     Camera camera{glm::vec3(2.0f, 2.0f, 2.0f), (float)swapChainExtent.width/swapChainExtent.width};
     TransformController transformController;
 
@@ -167,9 +169,19 @@ private:
     void init() {
         initWindow();
         initVulkan();
+        pipelineManager.PipelineManager_init(device);
+        generateRenderMethods();
+        //world = std::make_unique<World>(device, physicalDevice, graphicsQueue, commandPool, descriptorSetLayout, MAX_FRAMES_IN_FLIGHT);
+
+        /*world->generateChunk({ 0,0,0 });
+        world->generateChunk({ 1,0,0 });
+        world->generateChunk({ 0,0,1 });
+        world->generateChunk({ 1,0,1 });*/
+
         Input::init(window);
         createImGuiContext();
         initTransformController();
+
         modelManager.gatherModelData(MODEL_PATH_1, TEXTURE_PATH_1);
         //modelManager.gatherModelData(MODEL_PATH_2, TEXTURE_PATH_2);
         modelManager.updateLoadedModels(device, physicalDevice, commandPool, graphicsQueue, descriptorSetLayout, MAX_FRAMES_IN_FLIGHT);
@@ -182,6 +194,8 @@ private:
         }
         gui.cleanup(device);
         modelManager.cleanUp(device);
+        //world->cleanup();
+        //world.reset();
         destroyVulkanContext();
         destroyGlfwContext();
     }
@@ -195,7 +209,7 @@ private:
         glfwSetWindowUserPointer(window, this);
 
         glfwSetDropCallback(window, [](GLFWwindow* window, int count, const char** paths) {
-            auto* app = static_cast<TriangleDrawApplication*>(glfwGetWindowUserPointer(window));
+            auto* app = static_cast<Vortx*>(glfwGetWindowUserPointer(window));
             app->onFileDrop(window, count, paths);
             });
 
@@ -218,7 +232,7 @@ private:
         }
     }
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
-        auto app = reinterpret_cast<TriangleDrawApplication*>(glfwGetWindowUserPointer(window));
+        auto app = reinterpret_cast<Vortx*>(glfwGetWindowUserPointer(window));
         app->framebufferResized = true;
     }
     void initVulkan() {
@@ -231,8 +245,6 @@ private:
         createImageViews();
         createRenderPass();
         createDescriptorSetLayout();
-        init_pipelineBuilder();
-        buildGraphicsPipeline();
         createCommandPool();
         createDepthResources();
         createFramebuffers();
@@ -275,8 +287,7 @@ private:
 
         vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 
-        vkDestroyPipeline(device, renderFill_Pipeline, nullptr);
-        vkDestroyPipeline(device, renderEdge_Pipeline, nullptr);
+        pipelineManager.~PipelineManager();
         vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
         vkDestroyRenderPass(device, renderPass, nullptr);
         
@@ -719,84 +730,8 @@ private:
             throw std::runtime_error("failed to create descriptor set layout!");
         }
     }
-    void init_pipelineBuilder() {
-        pipelineBuilder.bindingDescription = Vertex::getBindingDescription();
-        auto attrArray = Vertex::getAttributeDescriptions();
-        pipelineBuilder.attributeDescriptions = std::vector<VkVertexInputAttributeDescription>(attrArray.begin(), attrArray.end());
 
-        pipelineBuilder.vertexInputInfo = {};
-        pipelineBuilder.vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-        pipelineBuilder.vertexInputInfo.vertexBindingDescriptionCount = 1;
-        pipelineBuilder.vertexInputInfo.pVertexBindingDescriptions = &pipelineBuilder.bindingDescription;
-        pipelineBuilder.vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(pipelineBuilder.attributeDescriptions.size());
-        pipelineBuilder.vertexInputInfo.pVertexAttributeDescriptions = pipelineBuilder.attributeDescriptions.data();
-
-        pipelineBuilder.viewport = {};
-        pipelineBuilder.viewport.x = 0.0f;
-        pipelineBuilder.viewport.y = 0.0f;
-        pipelineBuilder.viewport.width = (float)swapChainExtent.width;
-        pipelineBuilder.viewport.height = (float)swapChainExtent.height;
-        pipelineBuilder.viewport.minDepth = 0.0f;
-        pipelineBuilder.viewport.maxDepth = 1.0f;
-
-        pipelineBuilder.scissor = {};
-        pipelineBuilder.scissor.offset = { 0, 0 };
-        pipelineBuilder.scissor.extent = swapChainExtent;
-
-        pipelineBuilder.dynamicStates = {
-            VK_DYNAMIC_STATE_VIEWPORT,
-            VK_DYNAMIC_STATE_SCISSOR
-        };
-
-        pipelineBuilder.dynamicState = {};
-        pipelineBuilder.dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        pipelineBuilder.dynamicState.dynamicStateCount = static_cast<uint32_t>(pipelineBuilder.dynamicStates.size());
-        pipelineBuilder.dynamicState.pDynamicStates = pipelineBuilder.dynamicStates.data();
-
-        pipelineBuilder.viewportState = {};
-        pipelineBuilder.viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-        pipelineBuilder.viewportState.viewportCount = 1;
-        pipelineBuilder.viewportState.pViewports = nullptr;
-        pipelineBuilder.viewportState.scissorCount = 1;
-        pipelineBuilder.viewportState.pScissors = nullptr;
-
-        pipelineBuilder.multisampling = {};
-        pipelineBuilder.multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        pipelineBuilder.multisampling.sampleShadingEnable = VK_FALSE;
-        pipelineBuilder.multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-        pipelineBuilder.multisampling.minSampleShading = 1.0f;
-        pipelineBuilder.multisampling.pSampleMask = nullptr;
-        pipelineBuilder.multisampling.alphaToCoverageEnable = VK_FALSE;
-        pipelineBuilder.multisampling.alphaToOneEnable = VK_FALSE;
-    }
-
-    void buildGraphicsPipeline() {
-        auto vertShaderCode = readFile("shaders/vert.spv");
-        auto fragShaderCode = readFile("shaders/frag.spv");
-
-        VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
-        VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
-
-        VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
-        vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-        vertShaderStageInfo.module = vertShaderModule;
-        vertShaderStageInfo.pName = "main";
-
-        VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
-        fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-        fragShaderStageInfo.module = fragShaderModule;
-        fragShaderStageInfo.pName = "main";
-
-        pipelineBuilder.shaderStages[0] = vertShaderStageInfo;
-        pipelineBuilder.shaderStages[1] = fragShaderStageInfo;
-
-        pipelineBuilder.setDefaultInputAssembly();
-        pipelineBuilder.setDefaultRasterizer(VK_POLYGON_MODE_FILL);
-        pipelineBuilder.setDefaultColorBlend();
-        pipelineBuilder.setDefaultDepthStencil(true);
-
+    void generateRenderMethods() {
         VkPushConstantRange pushConstantsRange{};
         pushConstantsRange.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
         pushConstantsRange.size = sizeof(PushConstants);
@@ -813,40 +748,30 @@ private:
             throw std::runtime_error("failed to create pipeline layout!");
         }
 
-        pipelineBuilder.pipelineLayout = pipelineLayout;
-        pipelineBuilder.renderPass = renderPass;
+        PipelineVertexInput vertexInput{};
+        vertexInput.bindings.push_back(Vertex::getBindingDescription());
+        auto attrib = Vertex::getAttributeDescriptions();
+        vertexInput.attributes.insert(vertexInput.attributes.end(), attrib.begin(), attrib.end());
 
-        renderFill_Pipeline = pipelineBuilder.buildPipeline(device);
+        PipelineDescription pipeFill_Desc{};
+        pipeFill_Desc.vertShaderPath = "shaders/vert.spv";
+        pipeFill_Desc.fragShaderPath = "shaders/frag.spv";
+        pipeFill_Desc.renderPass = renderPass;
+        pipeFill_Desc.pipelineLayout = pipelineLayout;
+        pipeFill_Desc.vertexInput = vertexInput;
 
-        pipelineBuilder.setDefaultRasterizer(VK_POLYGON_MODE_LINE);
-        renderEdge_Pipeline = pipelineBuilder.buildPipeline(device);
+        PipelineDescription pipeEdge_Desc{};
+        pipeEdge_Desc.vertShaderPath = "shaders/vert.spv";
+        pipeEdge_Desc.fragShaderPath = "shaders/frag.spv";
+        pipeEdge_Desc.renderPass = renderPass;
+        pipeEdge_Desc.pipelineLayout = pipelineLayout;
+        pipeEdge_Desc.vertexInput = vertexInput;
+        pipeEdge_Desc.polygonMode = VK_POLYGON_MODE_LINE;
 
-        vkDestroyShaderModule(device, vertShaderModule, nullptr);
-        vkDestroyShaderModule(device, fragShaderModule, nullptr);
+        renderFill_Pipeline =  pipelineManager.createPipleine(pipeFill_Desc);
+        renderEdge_Pipeline = pipelineManager.createPipleine(pipeEdge_Desc);
     }
-    static std::vector<char> readFile(const std::string& filename) {
-        std::ifstream file(filename, std::ios::ate | std::ios::binary);
-        if (!file.is_open()) {
-            throw std::runtime_error("failed to open file!" + filename);
-        }
-        size_t fileSize = (size_t)file.tellg();
-        std::vector<char> buffer(fileSize);
-        file.seekg(0);
-        file.read(buffer.data(), fileSize);
-        file.close();
-        return buffer;
-    }
-    VkShaderModule createShaderModule(const std::vector<char>& code) {
-        VkShaderModuleCreateInfo createInfo{};
-        createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-        createInfo.codeSize = code.size();
-        createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
-        VkShaderModule shaderModule;
-        if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create shader module!");
-        }
-        return shaderModule;
-    }
+
     void createFramebuffers() {
         swapChainFramebuffers.resize(swapChainImageViews.size());
         for (size_t i = 0; i < swapChainImageViews.size(); i++) {
@@ -932,19 +857,20 @@ private:
 
         switch (drawMode) {
         case objectMode:
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderFill_Pipeline);
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineManager.get(renderFill_Pipeline).pipeline);
             break;
         case wireframeMode:
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderEdge_Pipeline);
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineManager.get(renderEdge_Pipeline).pipeline);
             break;
         default:
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderFill_Pipeline);
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineManager.get(renderFill_Pipeline).pipeline);
         }
 
         PushConstants pc{};
         pc.useTexture = (sceneRenderState.enableTextures) ? 1 : 0;
         vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pc);
 
+        //world->draw(commandBuffer, pipelineLayout, currentFrame);
         modelManager.drawAll(commandBuffer, pipelineLayout, currentFrame);
 
         gui.endFrame(commandBuffers[currentFrame]);
@@ -1091,7 +1017,7 @@ private:
     void updateUniformBuffer(uint32_t currentImage) {
         int index = 0;
         for (auto& model : modelManager.getModelList()) {
-            UniformBufferObject ubo{};
+            Model_UBO ubo{};
 
             ubo.model = glm::translate(glm::mat4(1.0f), model->modelTransforms.position);
             ubo.model = glm::rotate(ubo.model, glm::radians(model->modelTransforms.rotation.x), glm::vec3(1, 0, 0));
@@ -1105,7 +1031,7 @@ private:
             ubo.lightDir = glm::vec4(glm::normalize(sceneRenderState.lightDir), 0.0f);
             ubo.lightColor = glm::vec4(sceneRenderState.lightColor, 1.0f);
 
-            ubo.selected = (index == modelManager.selectedModelIndex) ? 1 : 0;
+            ubo.selected = (model->isSelected) ? 1 : 0;//(index == modelManager.selectedModelIndex) ? 1 : 0;
 
             model->updateUBO(device, ubo, currentImage);
             index++;
@@ -1114,9 +1040,9 @@ private:
 
     void handleInputs() {
         if(!transformController.inTransformationState) camera.handleCamera(window);
-        if (modelManager.selectedModelIndex >= 0) {
-            auto& activeModel = modelManager.getModelList()[modelManager.selectedModelIndex];
-            transformController.handletransforms(activeModel->modelTransforms.position, activeModel->modelTransforms.rotation, activeModel->modelTransforms.scale);
+        if (!modelManager.selectedModels.empty()) {
+            Model* activeModel = *modelManager.selectedModels.begin();
+            transformController.handletransforms(activeModel->modelTransforms.position, activeModel->modelTransforms.rotation, activeModel->modelTransforms.scale);    
         }
         Input::update(window);
     }
@@ -1126,14 +1052,21 @@ private:
 
         ImGui::Begin("Controls");
 
+        Model* remModel_ptr = nullptr;
         int index = 0;
         for (auto& model : modelManager.getModelList()) {
             std::string header = "Model" + std::to_string(index);
             if (ImGui::CollapsingHeader(header.c_str())) {
                 ImGui::PushID(index);
-
+                if (ImGui::Button("Delete", ImVec2(50.0f, 20.0f))) {
+                    remModel_ptr = model.get();
+                }
                 if (ImGui::Selectable("Select", model->isSelected)) {
-                    modelManager.selectedModelIndex = index;
+                    model->isSelected = !model->isSelected;
+                    switch(model->isSelected) {
+                    case 0: modelManager.selectedModels.erase(model.get());
+                    case 1: modelManager.selectedModels.insert(model.get());
+                    }
                 }
                 ImGui::DragFloat3("Position", &model->modelTransforms.position.x, 0.01f, -2.0f, 2.0f);
                 ImGui::DragFloat3("Rotation", &model->modelTransforms.rotation.x, 0.5f, -180.0f, 180.0f);
@@ -1142,13 +1075,22 @@ private:
             }
             index++;
         }
-        
+
+        if (remModel_ptr) {
+            modelManager.destroyModel(remModel_ptr, device);
+        }
+
         const char* currentModeName = (drawMode == DrawMode::objectMode) ? "Object mode" : "Wireframe mode";
 
         if (ImGui::BeginCombo("Select Mode", currentModeName)) {
             if (ImGui::Selectable("Object mode", drawMode == DrawMode::objectMode)) drawMode = DrawMode::objectMode;
             if (ImGui::Selectable("Wireframe mode", drawMode == DrawMode::wireframeMode)) drawMode = DrawMode::wireframeMode;
             ImGui::EndCombo();
+        }
+
+        if (ImGui::Button("add chunk", ImVec2(50.0f, 20.0f))) {
+            static int cx = 0, cz = 0;
+            world->generateChunk({ cx++, 0, cz++ });
         }
 
         ImGui::Checkbox("enableSmoothNormals", &sceneRenderState.smoothNormals);
@@ -1163,7 +1105,7 @@ private:
 };
 
 int main() {
-    TriangleDrawApplication App;
+    Vortx App;
     try {
         App.run();
     }

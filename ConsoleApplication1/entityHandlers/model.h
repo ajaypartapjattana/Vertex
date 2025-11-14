@@ -8,7 +8,7 @@
 
 #include <json-develop/single_include/nlohmann/json.hpp>
 
-#include "utility/Vertex.h"
+#include "renderer/utility/Vertex.h"
 
 using json = nlohmann::json;
 
@@ -24,7 +24,7 @@ struct Transform {
 	glm::vec3 scale	   { 1.0f, 1.0f, 1.0f };
 };
 
-struct UniformBufferObject {
+struct Model_UBO {
 	alignas(16) glm::mat4 model;
 	alignas(16) glm::mat4 view;
 	alignas(16) glm::mat4 proj;
@@ -58,7 +58,7 @@ public:
 	void createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue);
 	void createDescriptorPool(VkDevice device, uint16_t MAX_FRAMES_IN_FLIGHT);
 	void createUniformBuffer(VkDevice device, VkPhysicalDevice physicalDevice, uint16_t MAX_FRAMES_IN_FLIGHT);
-	void updateUBO(VkDevice device, const UniformBufferObject& uboData, uint32_t currentImage);
+	void updateUBO(VkDevice device, const Model_UBO& uboData, uint32_t currentImage);
 	void createTexture(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, const std::string& texture_path);
 	void createDescriptorSet(VkDevice device, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT);
 	void draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint16_t currentFrame);
