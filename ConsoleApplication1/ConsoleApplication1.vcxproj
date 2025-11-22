@@ -160,6 +160,8 @@
     <ClInclude Include="Controllers\Camera.h" />
     <ClInclude Include="Controllers\transformController.h" />
     <ClInclude Include="Controllers\Utilities\vecMath.h" />
+    <ClInclude Include="entityHandlers\FastNoiseLite.h" />
+    <ClInclude Include="entityHandlers\renderer\utility\stb_image_write.h" />
     <ClInclude Include="entityHandlers\world.h" />
     <ClInclude Include="GuiLayer.h" />
     <ClInclude Include="Controllers\Input.h" />

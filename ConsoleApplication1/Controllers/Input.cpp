@@ -42,7 +42,7 @@ void Input::cursorPosCallBack(GLFWwindow* window, double xpos, double ypos) {
 
 void Input::update(GLFWwindow* window) {
 	keysPrev = keys;
-	mouseButtonsPrev = mouseButtons;;
+	mouseButtonsPrev = mouseButtons;
 }
 
 bool Input::isKeyPressed(int key) {

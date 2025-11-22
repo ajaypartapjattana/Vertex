@@ -18,7 +18,7 @@ Camera::Camera(glm::vec3 position, float aspectRatio) :
 void Camera::handleCamera(GLFWwindow* window) {
 	float deltaTime = Input::getDeltaTime();
 
-	float moveSpeed = 2.0f * deltaTime;
+	float moveSpeed = 10.0f * deltaTime;
 	float cameraSensitivity = 0.25f * (getCameraFov() / 90.0f);
 	glm::vec2 scrollDelta = Input::getScrollDelta();
 	if (scrollDelta.y != 0) {

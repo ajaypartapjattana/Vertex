@@ -104,5 +104,11 @@
     <ClInclude Include="entityHandlers\renderer\pipelineManager.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="entityHandlers\renderer\utility\stb_image_write.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="entityHandlers\FastNoiseLite.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

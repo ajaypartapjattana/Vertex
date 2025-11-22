@@ -1,17 +1,13 @@
 #define NOMINMAX
 #define VK_USE_PLATFORM_WIN32_KHR
 #define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
 #define GLFW_EXPOSE_NATIVE_WIN32
-#include <GLFW/glfw3native.h>
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/hash.hpp>
 
-#include <fstream>
+#include <GLFW/glfw3.h>
+
 #include <iostream>
 #include <stdexcept>
 #include <algorithm>
@@ -49,7 +45,7 @@ const std::vector<const char*> validationLayers = { "VK_LAYER_KHRONOS_validation
 const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
 enum DrawMode {
-    objectMode, wireframeMode
+    objectMode, wireframeMode, pointMode
 };
 
 #ifdef NDEBUG
@@ -132,6 +128,7 @@ private:
     
     PipelineHandle renderFill_Pipeline;
     PipelineHandle renderEdge_Pipeline;
+    PipelineHandle renderPoint_Pipeline;
 
     std::vector<VkFramebuffer> swapChainFramebuffers;
 
@@ -171,18 +168,19 @@ private:
         initVulkan();
         pipelineManager.PipelineManager_init(device);
         generateRenderMethods();
-        //world = std::make_unique<World>(device, physicalDevice, graphicsQueue, commandPool, descriptorSetLayout, MAX_FRAMES_IN_FLIGHT);
+        world = std::make_unique<World>(device, physicalDevice, graphicsQueue, commandPool, descriptorSetLayout, MAX_FRAMES_IN_FLIGHT, "block_textures/stone.png");
+        world->vkSetDebugUtilsObjectNameEXT = (PFN_vkSetDebugUtilsObjectNameEXT)vkGetDeviceProcAddr(device, "vkSetDebugUtilsObjectNameEXT");
 
-        /*world->generateChunk({ 0,0,0 });
-        world->generateChunk({ 1,0,0 });
-        world->generateChunk({ 0,0,1 });
-        world->generateChunk({ 1,0,1 });*/
+        world->generateChunk({ 0,0,0 });
+        world->generateChunk({ -1,0,0 });
+        world->generateChunk({ 0,0,-1 });
+        world->generateChunk({ -1,0,-1 });
 
         Input::init(window);
         createImGuiContext();
         initTransformController();
 
-        modelManager.gatherModelData(MODEL_PATH_1, TEXTURE_PATH_1);
+        //modelManager.gatherModelData(MODEL_PATH_1, TEXTURE_PATH_1);
         //modelManager.gatherModelData(MODEL_PATH_2, TEXTURE_PATH_2);
         modelManager.updateLoadedModels(device, physicalDevice, commandPool, graphicsQueue, descriptorSetLayout, MAX_FRAMES_IN_FLIGHT);
         //modelManager.loadModelMeta();
@@ -194,8 +192,7 @@ private:
         }
         gui.cleanup(device);
         modelManager.cleanUp(device);
-        //world->cleanup();
-        //world.reset();
+        world.reset();
         destroyVulkanContext();
         destroyGlfwContext();
     }
@@ -759,6 +756,7 @@ private:
         pipeFill_Desc.renderPass = renderPass;
         pipeFill_Desc.pipelineLayout = pipelineLayout;
         pipeFill_Desc.vertexInput = vertexInput;
+        pipeFill_Desc.cullMode = VK_CULL_MODE_NONE;
 
         PipelineDescription pipeEdge_Desc{};
         pipeEdge_Desc.vertShaderPath = "shaders/vert.spv";
@@ -767,9 +765,20 @@ private:
         pipeEdge_Desc.pipelineLayout = pipelineLayout;
         pipeEdge_Desc.vertexInput = vertexInput;
         pipeEdge_Desc.polygonMode = VK_POLYGON_MODE_LINE;
+        pipeEdge_Desc.cullMode = VK_CULL_MODE_NONE;
+
+        PipelineDescription pipePoint_Desc{};
+        pipePoint_Desc.vertShaderPath = "shaders/vert.spv";
+        pipePoint_Desc.fragShaderPath = "shaders/frag.spv";
+        pipePoint_Desc.renderPass = renderPass;
+        pipePoint_Desc.pipelineLayout = pipelineLayout;
+        pipePoint_Desc.vertexInput = vertexInput;
+        pipePoint_Desc.polygonMode = VK_POLYGON_MODE_POINT;
+        pipePoint_Desc.cullMode = VK_CULL_MODE_NONE;
 
         renderFill_Pipeline =  pipelineManager.createPipleine(pipeFill_Desc);
         renderEdge_Pipeline = pipelineManager.createPipleine(pipeEdge_Desc);
+        renderPoint_Pipeline = pipelineManager.createPipleine(pipePoint_Desc);
     }
 
     void createFramebuffers() {
@@ -862,6 +871,9 @@ private:
         case wireframeMode:
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineManager.get(renderEdge_Pipeline).pipeline);
             break;
+        case pointMode:
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineManager.get(renderPoint_Pipeline).pipeline);
+            break;
         default:
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineManager.get(renderFill_Pipeline).pipeline);
         }
@@ -870,7 +882,7 @@ private:
         pc.useTexture = (sceneRenderState.enableTextures) ? 1 : 0;
         vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pc);
 
-        //world->draw(commandBuffer, pipelineLayout, currentFrame);
+        world->draw(commandBuffer, pipelineLayout, currentFrame);
         modelManager.drawAll(commandBuffer, pipelineLayout, currentFrame);
 
         gui.endFrame(commandBuffers[currentFrame]);
@@ -1031,11 +1043,20 @@ private:
             ubo.lightDir = glm::vec4(glm::normalize(sceneRenderState.lightDir), 0.0f);
             ubo.lightColor = glm::vec4(sceneRenderState.lightColor, 1.0f);
 
-            ubo.selected = (model->isSelected) ? 1 : 0;//(index == modelManager.selectedModelIndex) ? 1 : 0;
+            ubo.selected = (model->isSelected) ? 1 : 0;
 
             model->updateUBO(device, ubo, currentImage);
             index++;
         }
+
+        World_UBO ubo{};
+        ubo.model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f,0.0f,0.0f));
+        ubo.view = camera.getViewMatrix();
+        ubo.proj = camera.getProjectionMatrix();
+        ubo.lightDir = glm::vec4(glm::normalize(sceneRenderState.lightDir), 0.0f);
+        ubo.lightColor = glm::vec4(sceneRenderState.lightColor, 1.0f);
+        ubo.selected = 0;
+        world->updateUBO(device, ubo, currentImage);
     }
 
     void handleInputs() {
@@ -1079,12 +1100,24 @@ private:
         if (remModel_ptr) {
             modelManager.destroyModel(remModel_ptr, device);
         }
+        const char* currentModeName = nullptr;
 
-        const char* currentModeName = (drawMode == DrawMode::objectMode) ? "Object mode" : "Wireframe mode";
+        switch (drawMode) {
+        case DrawMode::objectMode: 
+            currentModeName = "Object mode";
+            break;
+        case DrawMode::wireframeMode: 
+            currentModeName = "Wireframe mode";
+            break;
+        case DrawMode::pointMode:
+            currentModeName = "Point mode";
+            break;
+        }
 
         if (ImGui::BeginCombo("Select Mode", currentModeName)) {
             if (ImGui::Selectable("Object mode", drawMode == DrawMode::objectMode)) drawMode = DrawMode::objectMode;
             if (ImGui::Selectable("Wireframe mode", drawMode == DrawMode::wireframeMode)) drawMode = DrawMode::wireframeMode;
+            if (ImGui::Selectable("Point mode", drawMode == DrawMode::pointMode)) drawMode = DrawMode::pointMode;
             ImGui::EndCombo();
         }
 
