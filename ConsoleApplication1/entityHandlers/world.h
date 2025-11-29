@@ -8,6 +8,7 @@
 
 #include "renderer/utility/Vertex.h"
 #include "renderer/utility/VulkanUtils.h"
+#include "commProtocols/threadCommProtocol.h"
 
 #include "FastNoiseLite.h"
 
@@ -24,30 +25,23 @@ struct World_UBO {
 	alignas(16) int selected;
 };
 
-struct Mesh {
-	std::vector<Vertex> vertices;
-	std::vector<uint32_t> indices;
-};
-
-enum BlockID {
-	AIR = 0,
-	GRASS = 1,
-	STONE = 2,
-	DIRT = 3
-};
-
 struct BlockData {
 	std::string name;
 	std::string filePath;
 	int index;
 };
 
-struct AtlasResult {
+struct TextureAtlas {
 	int atlasWidth;
 	int atlasHeight;
 	int tileSize;
 	std::unordered_map<uint8_t, glm::vec4> uvRanges;
 	std::vector<unsigned char> pixels;
+};
+
+struct Mesh {
+	std::vector<Vertex> vertices;
+	std::vector<uint32_t> indices;
 };
 
 struct Chunk {
@@ -81,24 +75,33 @@ struct IVec3Equal {
 	}
 };
 
+struct genratedChunk {
+	glm::ivec3 pos;
+	std::unique_ptr<Chunk> chunk;
+};
+
 class World {
 public:
 	PFN_vkSetDebugUtilsObjectNameEXT vkSetDebugUtilsObjectNameEXT = nullptr;
-	World(VkDevice device, VkPhysicalDevice physicalDevice, VkQueue queue, VkCommandPool commandPool, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT, const std::string& texture_path);
+	World(VkDevice device, VkPhysicalDevice physicalDevice, VkQueue queue, VkCommandPool commandPool, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT);
 	~World();
 
-	void generateChunk(const glm::ivec3& pos);
+	void reqProximityChunks(const glm::vec3& pos, const uint8_t& renderDistance);
+	void captureGenratedChunks();
+
+	std::unique_ptr<Chunk> generateChunk(const glm::ivec3& pos);
 	void updateChunkMesh(const glm::ivec3& pos);
 	void uploadChunkToGPU(Chunk& chunk);
-	void createTextureImage(const std::string& texture_path);
+	void createTextureImage(TextureAtlas atlas);
 	void draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint16_t currentFrame);
 	void updateUBO(VkDevice device, const World_UBO& uboData, uint32_t currentImage);
 
+	int getSurfaceZ(glm::vec3 pos);
 	void setBlock(int x, int y, int z, int blockType);
 	
 	void cleanup();
 
-	float heightMultiplier = 10.0f;
+	float heightMultiplier = 20.0f;
 
 private:
 	VkDevice device;
@@ -107,7 +110,7 @@ private:
 	VkCommandPool commandPool;
 
 	FastNoiseLite heightMap;
-	AtlasResult atlas;
+	TextureAtlas atlas;
 
 	VkImage textureAtlas{ VK_NULL_HANDLE };
 	VkDeviceMemory textureAtlasMemory{ VK_NULL_HANDLE };
@@ -126,13 +129,20 @@ private:
 	void createWorldDescriptorSet(VkDevice device, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT);
 	void createWorldUniformBuffer(VkDevice device, VkPhysicalDevice physicalDevice, uint16_t MAX_FRAMES_IN_FLIGHT);
 
-	AtlasResult buildTextureAtlas(std::vector<BlockData>& inputBlocks, int tileSize);
+	TextureAtlas buildTextureAtlas(std::vector<BlockData>& inputBlocks, int tileSize);
 
 	int getTerrainHeight(int x, int z);
+	glm::ivec2 getChunkCoordinates(glm::vec3 pos);
 
 	void GreedyMesher(const Chunk& chunk, std::vector<Vertex>& verts, std::vector<uint32_t>& indices);
 	void Mesher(const Chunk& chunk, std::vector<Vertex>& verts, std::vector<uint32_t>& indices);
 
 	void createChunkBuffers(Chunk& chunk);
 	void destroyChunkBuffers(Chunk& chunk);
+
+	std::atomic<bool> chunkBuilderActive;
+	ThreadSafeQueue<glm::ivec3> reqChunks;
+	ThreadSafeQueue<genratedChunk> createdChunks;
+	std::thread ChunkBuilder;
+	void chunkBuilderLoop();
 };

@@ -168,13 +168,8 @@ private:
         initVulkan();
         pipelineManager.PipelineManager_init(device);
         generateRenderMethods();
-        world = std::make_unique<World>(device, physicalDevice, graphicsQueue, commandPool, descriptorSetLayout, MAX_FRAMES_IN_FLIGHT, "block_textures/stone.png");
+        world = std::make_unique<World>(device, physicalDevice, graphicsQueue, commandPool, descriptorSetLayout, MAX_FRAMES_IN_FLIGHT);
         world->vkSetDebugUtilsObjectNameEXT = (PFN_vkSetDebugUtilsObjectNameEXT)vkGetDeviceProcAddr(device, "vkSetDebugUtilsObjectNameEXT");
-
-        world->generateChunk({ 0,0,0 });
-        world->generateChunk({ -1,0,0 });
-        world->generateChunk({ 0,0,-1 });
-        world->generateChunk({ -1,0,-1 });
 
         Input::init(window);
         createImGuiContext();
@@ -201,7 +196,7 @@ private:
         glfwInit();
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
-        window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
+        window = glfwCreateWindow(WIDTH, HEIGHT, "Vortx", nullptr, nullptr);
         glfwMakeContextCurrent(window);
         glfwSetWindowUserPointer(window, this);
 
@@ -262,6 +257,7 @@ private:
             handleInputs();
             buildUI();
             drawFrame();
+            world->captureGenratedChunks();
         }
         vkDeviceWaitIdle(device);
 
@@ -316,7 +312,7 @@ private:
         }
         VkApplicationInfo appInfo{};
         appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-        appInfo.pApplicationName = "First Triangle";
+        appInfo.pApplicationName = "Vortx";
         appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
         appInfo.pEngineName = "No Engine";
         appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
@@ -1085,8 +1081,14 @@ private:
                 if (ImGui::Selectable("Select", model->isSelected)) {
                     model->isSelected = !model->isSelected;
                     switch(model->isSelected) {
-                    case 0: modelManager.selectedModels.erase(model.get());
-                    case 1: modelManager.selectedModels.insert(model.get());
+                    case 0: {
+                        modelManager.selectedModels.erase(model.get());
+                        break;
+                    }
+                    case 1: {
+                        modelManager.selectedModels.insert(model.get());
+                        break;
+                    }
                     }
                 }
                 ImGui::DragFloat3("Position", &model->modelTransforms.position.x, 0.01f, -2.0f, 2.0f);
@@ -1122,10 +1124,12 @@ private:
         }
 
         if (ImGui::Button("add chunk", ImVec2(50.0f, 20.0f))) {
-            static int cx = 0, cz = 0;
-            world->generateChunk({ cx++, 0, cz++ });
+            world->reqProximityChunks(camera.getPosition(), 8);
+            //static int cx = 0, cz = 0;
+            //world->generateChunk({ cx++, 0, cz++ });
         }
 
+        ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
         ImGui::Checkbox("enableSmoothNormals", &sceneRenderState.smoothNormals);
         ImGui::Checkbox("Textures", &sceneRenderState.enableTextures);
         ImGui::Checkbox("saveData at termination", &sceneRenderState.saveModelData);

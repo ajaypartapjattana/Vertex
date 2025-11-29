@@ -14,8 +14,8 @@
 #include "renderer/utility/stb_image_write.h"
 #pragma warning(pop)
 
-World::World(VkDevice device, VkPhysicalDevice physicalDevice, VkQueue queue, VkCommandPool commandPool, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT, const std::string& texture_path)
-	: device(device), physicalDevice(physicalDevice), queue(queue), commandPool(commandPool) {
+World::World(VkDevice device, VkPhysicalDevice physicalDevice, VkQueue queue, VkCommandPool commandPool, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT)
+	: chunkBuilderActive(true), ChunkBuilder(&World::chunkBuilderLoop, this), device(device), physicalDevice(physicalDevice), queue(queue), commandPool(commandPool) {
 	heightMap.SetNoiseType(FastNoiseLite::NoiseType_Perlin);
 	heightMap.SetFrequency(0.1f);
 
@@ -44,24 +44,49 @@ World::World(VkDevice device, VkPhysicalDevice physicalDevice, VkQueue queue, Vk
 	std::vector<BlockData> inBlocks = { grass , stone, dirt, netherack };
 	atlas = buildTextureAtlas(inBlocks, 16);
 
-	createTextureImage("atlas.png");
+	createTextureImage(atlas);
 	createWorldUniformBuffer(device, physicalDevice, FRAMES_IN_FLIGHT);
 	createWorldDescriptorSet(device, descriptorSetLayout, FRAMES_IN_FLIGHT);
 }
 
 World::~World() {
+	chunkBuilderActive = false;
+	if (ChunkBuilder.joinable()) ChunkBuilder.join();
 	cleanup();
 }
 
-void World::generateChunk(const glm::ivec3& pos) {
-	if (chunks.find(pos) != chunks.end()) return;
+//to fix camera pos'space conversion [from world to chunk space]
+void World::reqProximityChunks(const glm::vec3& pos, const uint8_t& renderDistance) {
+	for(int i = -renderDistance; i < renderDistance; i++)
+		for (int j = -renderDistance; j < renderDistance; j++) {
+			if ((i * i) + (j * j) <= (renderDistance * renderDistance)) {
+				glm::ivec3 proxChunk = { pos.x/CHUNK_SIZE + i, 0, pos.z/CHUNK_SIZE + j };
+				if(chunks.find(proxChunk) == chunks.end()) reqChunks.push(proxChunk);
+				std::cout << "requested chunk : [" << proxChunk.x << "," << proxChunk.z << "]" << std::endl;
+			}
+		}
+}
+
+void World::captureGenratedChunks() {
+	auto maybeChunk = createdChunks.try_pop();
+	while (maybeChunk.has_value()) {
+		auto& genChunk = maybeChunk.value();
+		chunks[genChunk.pos] = std::move(genChunk.chunk);
+
+		maybeChunk = createdChunks.try_pop();
+	}
+}
+
+std::unique_ptr<Chunk> World::generateChunk(const glm::ivec3& pos) {
+	if (chunks.find(pos) != chunks.end()) return nullptr;
+
+	std::cout << "genrating chunk at : [" << pos.x << "," << pos.z << "]" << std::endl;
 
 	auto chunk = std::make_unique<Chunk>();
 	chunk->chunkPos = pos;
 	chunk->chunkMesh.vertices.clear();
 	chunk->chunkMesh.indices.clear();
 
-	//chunk genration:
 	int baseX = pos.x * CHUNK_SIZE;
 	int baseZ = pos.z * CHUNK_SIZE;
 
@@ -86,7 +111,7 @@ void World::generateChunk(const glm::ivec3& pos) {
 	std::cout << "verts = " << chunk->chunkMesh.vertices.size() << " indices = " << chunk->chunkMesh.indices.size() << std::endl;
 
 	chunk->dirty = true;
-	chunks[pos] = std::move(chunk);
+	return chunk;
 }
 
 void World::Mesher(const Chunk& chunk, std::vector<Vertex>& verts, std::vector<uint32_t>& indices)
@@ -160,7 +185,6 @@ void World::Mesher(const Chunk& chunk, std::vector<Vertex>& verts, std::vector<u
 		}
 	}
 }
-
 
 void World::GreedyMesher(const Chunk& chunk, std::vector<Vertex>& verts, std::vector<uint32_t>& indices)
 {
@@ -272,7 +296,7 @@ void World::GreedyMesher(const Chunk& chunk, std::vector<Vertex>& verts, std::ve
 					glm::vec3 normal(0);
 					normal[W] = (c > 0 ? 1.0f : -1.0f);
 
-					uint32_t base = verts.size();
+					uint32_t base = static_cast<uint32_t>(verts.size());
 					glm::vec3 color = {1.0f, 1.0f, 1.0f};
 
 					verts.push_back({ p0, normal, color, {0,0} });
@@ -356,10 +380,10 @@ void World::updateChunkMesh(const glm::ivec3& pos) {
 	uploadChunkToGPU(chunk);
 }
 
-AtlasResult World::buildTextureAtlas(std::vector<BlockData>& inputBlocks, int tileSize) {
-	AtlasResult result;
+TextureAtlas World::buildTextureAtlas(std::vector<BlockData>& inputBlocks, int tileSize) {
+	TextureAtlas result;
 	result.tileSize = tileSize;
-	int blockCount = inputBlocks.size();
+	int blockCount = static_cast<int>(inputBlocks.size());
 
 	int atlasTilesPerRow = (int)std::ceil(std::sqrt(blockCount));
 	int atlasSizePx = atlasTilesPerRow * tileSize;
@@ -374,7 +398,6 @@ AtlasResult World::buildTextureAtlas(std::vector<BlockData>& inputBlocks, int ti
 		int xTile = index % atlasTilesPerRow;
 		int yTile = index / atlasTilesPerRow;
 
-		//block.index = 
 		index++;
 
 		int dstX = xTile * tileSize;
@@ -421,11 +444,9 @@ AtlasResult World::buildTextureAtlas(std::vector<BlockData>& inputBlocks, int ti
 	return result;
 }
 
-
-void World::createTextureImage(const std::string& texturePath) {
-	int texWidth, texHeight, texChannel;
-	stbi_uc* pixels = stbi_load(texturePath.c_str(), &texWidth, &texHeight, &texChannel, 4);
-	VkDeviceSize imageSize = texWidth * texHeight * 4;
+void World::createTextureImage(TextureAtlas atlas) {
+	unsigned char* pixels = atlas.pixels.data();
+	VkDeviceSize imageSize = atlas.atlasWidth * atlas.atlasHeight * 4;
 
 	if (!pixels) {
 		throw std::runtime_error("failed to load texture image!");
@@ -439,11 +460,10 @@ void World::createTextureImage(const std::string& texturePath) {
 	vkMapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data);
 	memcpy(data, pixels, static_cast<size_t>(imageSize));
 	vkUnmapMemory(device, stagingBufferMemory);
-	stbi_image_free(pixels);
 
-	VulkanUtils::createImage(device, physicalDevice, texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureAtlas, textureAtlasMemory);
+	VulkanUtils::createImage(device, physicalDevice, atlas.atlasWidth, atlas.atlasHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureAtlas, textureAtlasMemory);
 	VulkanUtils::transitionImageLayout(commandPool, device, queue, textureAtlas, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-	VulkanUtils::copyBufferToImage(device, queue, commandPool, stagingBuffer, textureAtlas, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+	VulkanUtils::copyBufferToImage(device, queue, commandPool, stagingBuffer, textureAtlas, static_cast<uint32_t>(atlas.atlasWidth), static_cast<uint32_t>(atlas.atlasHeight));
 	VulkanUtils::transitionImageLayout(commandPool, device, queue, textureAtlas, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 	vkDestroyBuffer(device, stagingBuffer, nullptr);
@@ -474,6 +494,19 @@ void World::draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout,
 
 		vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(chunk.chunkMesh.indices.size()), 1, 0, 0, 0);
 	}
+}
+
+//int World::getSurfaceZ(glm::vec3 pos) {
+//	glm::ivec2 ChunkCoordinates = getChunkCoordinates(pos);
+//	auto& chunk = chunks[glm::ivec3(ChunkCoordinates.x, 0, ChunkCoordinates.y)];
+//
+//	for (int y = pos.y; y > 0; y--) {
+//		if(chunk->voxels[])
+//	}
+//}
+
+glm::ivec2 World::getChunkCoordinates(glm::vec3 pos) {
+	return glm::ivec2(pos.x / CHUNK_SIZE, pos.z / CHUNK_SIZE);
 }
 
 void World::setBlock(int x, int y, int z, int blockType) {
@@ -625,4 +658,16 @@ int World::getTerrainHeight(int x, int z) {
 	float n = heightMap.GetNoise((float)x, (float)z);
 	n = (n + 1.0f) * 0.5f;
 	return (int)(n * heightMultiplier);
+}
+
+void World::chunkBuilderLoop() {
+	while (chunkBuilderActive) {
+		auto reqChunk = reqChunks.try_pop();
+		if (!reqChunk.has_value()) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(10));
+			continue;
+		}
+		glm::ivec3 reqChunkPos = reqChunk.value();
+		createdChunks.push({ reqChunkPos, std::move(generateChunk(reqChunkPos)) });
+	}
 }

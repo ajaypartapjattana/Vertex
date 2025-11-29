@@ -11,7 +11,7 @@ Camera::Camera(glm::vec3 position, float aspectRatio) :
 	fov(45.0f),
 	aspect(1.0f),
 	nearPlane(0.1f),
-	farPlane(100.0f) {
+	farPlane(1000.0f) {
 	updateCameraVectors();
 }
 

@@ -58,5 +58,4 @@ private:
 	std::thread loaderThread;
 
 	void loaderLoop();
-	
 };
