@@ -1,0 +1,36 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+	<!-- Vulkan glslc compiler path -->
+	<PropertyGroup>
+		<GlslcPath>$(VULKAN_SDK)\Bin\glslc.exe</GlslcPath>
+		<ShadersDir>$(MSBuildProjectDirectory)\shaders</ShadersDir>
+	</PropertyGroup>
+
+	<!-- Collect all shader sources -->
+	<ItemGroup>
+		<ShaderFile Include="$(ShadersDir)\**\*.vert" />
+		<ShaderFile Include="$(ShadersDir)\**\*.frag" />
+		<ShaderFile Include="$(ShadersDir)\**\*.comp" />
+		<ShaderFile Include="$(ShadersDir)\**\*.geom" />
+		<ShaderFile Include="$(ShadersDir)\**\*.tesc" />
+		<ShaderFile Include="$(ShadersDir)\**\*.tese" />
+		<ShaderFile Include="$(ShadersDir)\**\*.glsl" />
+	</ItemGroup>
+
+	<!-- Main shader compilation target -->
+	<Target Name="CompileShaders"
+			Inputs="@(ShaderFile)"
+			Outputs="@(ShaderFile -> '%(FullPath).spv')">
+
+		<Message Text="---- Compiling shader: %(ShaderFile.Filename)%(ShaderFile.Extension) ----"
+				 Importance="High" />
+
+		<Exec Command="&quot;$(GlslcPath)&quot; &quot;%(ShaderFile.FullPath)&quot; -o &quot;%(ShaderFile.FullPath).spv&quot;"
+			  IgnoreExitCode="false" />
+
+	</Target>
+
+	<!-- Public target (this is what Visual Studio will run) -->
+	<Target Name="BuildShaders" DependsOnTargets="CompileShaders" />
+
+</Project>

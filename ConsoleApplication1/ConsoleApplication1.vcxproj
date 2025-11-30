@@ -161,6 +161,7 @@
     <ClInclude Include="Controllers\transformController.h" />
     <ClInclude Include="Controllers\Utilities\vecMath.h" />
     <ClInclude Include="entityHandlers\FastNoiseLite.h" />
+    <ClInclude Include="entityHandlers\renderer\utility\Chunk.h" />
     <ClInclude Include="entityHandlers\renderer\utility\stb_image_write.h" />
     <ClInclude Include="entityHandlers\world.h" />
     <ClInclude Include="GuiLayer.h" />
@@ -173,10 +174,12 @@
     <ClInclude Include="entityHandlers\renderer\pipelineManager.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="shaders\shader.frag" />
-    <None Include="shaders\shader.vert" />
+    <None Include="ShaderBuild.targets" />
+    <None Include="shaders\basic.frag" />
+    <None Include="shaders\basic.vert" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Import Project="$(MSBuildProjectDirectory)\ShaderBuild.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
 </Project>

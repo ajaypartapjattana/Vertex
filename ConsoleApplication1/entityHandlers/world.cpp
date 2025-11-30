@@ -15,7 +15,7 @@
 #pragma warning(pop)
 
 World::World(VkDevice device, VkPhysicalDevice physicalDevice, VkQueue queue, VkCommandPool commandPool, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT)
-	: chunkBuilderActive(true), ChunkBuilder(&World::chunkBuilderLoop, this), device(device), physicalDevice(physicalDevice), queue(queue), commandPool(commandPool) {
+	: chunkBuilderActive(true), ChunkGenerator(&World::chunkBuilderLoop, this), ChunkMesher(&World::chunkMesherLoop, this), device(device), physicalDevice(physicalDevice), queue(queue), commandPool(commandPool) {
 	heightMap.SetNoiseType(FastNoiseLite::NoiseType_Perlin);
 	heightMap.SetFrequency(0.1f);
 
@@ -24,25 +24,25 @@ World::World(VkDevice device, VkPhysicalDevice physicalDevice, VkQueue queue, Vk
 	BlockData grass{};
 	grass.name = "grass";
 	grass.index = 2;
-	grass.filePath = "block_textures/grass.png";
+	grass.filePath = "block_textures/grass_256.png";
 
 	BlockData stone{};
 	stone.name = "stone";
 	stone.index = 1;
-	stone.filePath = "block_textures/stone.png";
+	stone.filePath = "block_textures/stone_256.png";
 
 	BlockData dirt{};
 	dirt.name = "dirt";
 	dirt.index = 3;
-	dirt.filePath = "block_textures/dirt.png";
+	dirt.filePath = "block_textures/dirt_256.png";
 
 	BlockData netherack{};
 	netherack.name = "netherack";
 	netherack.index = 4;
-	netherack.filePath = "block_textures/netherack.png";
+	netherack.filePath = "block_textures/netherack_256.png";
 
 	std::vector<BlockData> inBlocks = { grass , stone, dirt, netherack };
-	atlas = buildTextureAtlas(inBlocks, 16);
+	atlas = buildTextureAtlas(inBlocks, 256);
 
 	createTextureImage(atlas);
 	createWorldUniformBuffer(device, physicalDevice, FRAMES_IN_FLIGHT);
@@ -51,30 +51,9 @@ World::World(VkDevice device, VkPhysicalDevice physicalDevice, VkQueue queue, Vk
 
 World::~World() {
 	chunkBuilderActive = false;
-	if (ChunkBuilder.joinable()) ChunkBuilder.join();
+	if (ChunkGenerator.joinable()) ChunkGenerator.join();
+	if (ChunkMesher.joinable()) ChunkMesher.join();
 	cleanup();
-}
-
-//to fix camera pos'space conversion [from world to chunk space]
-void World::reqProximityChunks(const glm::vec3& pos, const uint8_t& renderDistance) {
-	for(int i = -renderDistance; i < renderDistance; i++)
-		for (int j = -renderDistance; j < renderDistance; j++) {
-			if ((i * i) + (j * j) <= (renderDistance * renderDistance)) {
-				glm::ivec3 proxChunk = { pos.x/CHUNK_SIZE + i, 0, pos.z/CHUNK_SIZE + j };
-				if(chunks.find(proxChunk) == chunks.end()) reqChunks.push(proxChunk);
-				std::cout << "requested chunk : [" << proxChunk.x << "," << proxChunk.z << "]" << std::endl;
-			}
-		}
-}
-
-void World::captureGenratedChunks() {
-	auto maybeChunk = createdChunks.try_pop();
-	while (maybeChunk.has_value()) {
-		auto& genChunk = maybeChunk.value();
-		chunks[genChunk.pos] = std::move(genChunk.chunk);
-
-		maybeChunk = createdChunks.try_pop();
-	}
 }
 
 std::unique_ptr<Chunk> World::generateChunk(const glm::ivec3& pos) {
@@ -106,9 +85,9 @@ std::unique_ptr<Chunk> World::generateChunk(const glm::ivec3& pos) {
 		}
 
 	//GreedyMesher(*chunk, chunk->chunkMesh.vertices, chunk->chunkMesh.indices);
-	Mesher(*chunk, chunk->chunkMesh.vertices, chunk->chunkMesh.indices);
+	//Mesher(*chunk, chunk->chunkMesh.vertices, chunk->chunkMesh.indices);
 
-	std::cout << "verts = " << chunk->chunkMesh.vertices.size() << " indices = " << chunk->chunkMesh.indices.size() << std::endl;
+	//std::cout << "verts = " << chunk->chunkMesh.vertices.size() << " indices = " << chunk->chunkMesh.indices.size() << std::endl;
 
 	chunk->dirty = true;
 	return chunk;
@@ -116,6 +95,9 @@ std::unique_ptr<Chunk> World::generateChunk(const glm::ivec3& pos) {
 
 void World::Mesher(const Chunk& chunk, std::vector<Vertex>& verts, std::vector<uint32_t>& indices)
 {
+	glm::ivec3 pos = chunk.chunkPos;
+	std::cout << "Meshing chunk: [" << pos.x << "," << pos.z << "]" << std::endl;
+
 	verts.clear();
 	indices.clear();
 
@@ -137,21 +119,35 @@ void World::Mesher(const Chunk& chunk, std::vector<Vertex>& verts, std::vector<u
 		{ {1,0,0}, {0,0,0}, {0,1,0}, {1,1,0} }
 	};
 
-	auto isSolid = [&](int x, int y, int z) {
-		if (x < 0 || y < 0 || z < 0) return false;
-		if (x >= CHUNK_SIZE || y >= CHUNK_SIZE || z >= CHUNK_SIZE) return false;
-		return chunk.voxels[x][y][z] != 0;
-		};
+	auto isSolid = [&](int WorldX, int WorldY, int WorldZ) -> bool {
+		glm::ivec3 cpos((int)std::floor(WorldX / (float)CHUNK_SIZE), 0, (int)std::floor(WorldZ / (float)CHUNK_SIZE));
+		Chunk* c = findChunk(cpos);
+		if (!c) return 0;
+		int lx = WorldX - cpos.x * CHUNK_SIZE;
+		int ly = WorldY;
+		int lz = WorldZ - cpos.z * CHUNK_SIZE;
+		return (c->get(lx, ly, lz) != 0);
+	};
+
+	auto getUVForBlock = [&](uint8_t block) -> glm::vec4 {
+		auto it = atlas.uvRanges.find(block);
+		if (it == atlas.uvRanges.end()) {
+			static glm::vec4 defaultUV(0.0f, 0.0f, 1.0f, 1.0f);
+			return defaultUV;
+		}
+		return it->second;
+	};
+
+	int baseWX = pos.x * CHUNK_SIZE;
+	int baseWZ = pos.z * CHUNK_SIZE;
 
 	for (int x = 0; x < CHUNK_SIZE; x++){
 		for (int y = 0; y < CHUNK_SIZE; y++){
 			for (int z = 0; z < CHUNK_SIZE; z++){
-				//if (!isSolid(x, y, z)) continue;
-				uint8_t block = chunk.voxels[x][y][z];
+				uint8_t block = chunk.get(x, y, z);
 				if (!block) continue;
 
-				glm::vec4 uvRect = atlas.uvRanges.at(block);
-
+				glm::vec4 uvRect = getUVForBlock(block);
 				glm::vec2 uvFace[4] = {
 					{uvRect.x, uvRect.y},
 					{uvRect.z, uvRect.y},
@@ -159,16 +155,23 @@ void World::Mesher(const Chunk& chunk, std::vector<Vertex>& verts, std::vector<u
 					{uvRect.x, uvRect.w}
 				};
 
+				int WorldX = baseWX + x;
+				int WorldY = y;
+				int WorldZ = baseWZ + z;
+
 				for (int f = 0; f < 6; f++){
 					glm::ivec3 n = faceNormals[f];
-					int nx = x + n.x, ny = y + n.y, nz = z + n.z;
-					if (isSolid(nx, ny, nz))
-						continue;
+
+					int nx = WorldX + n.x;
+					int ny = WorldY + n.y;
+					int nz = WorldZ + n.z;
+
+					if (isSolid(nx, ny, nz)) continue;
 
 					uint32_t baseIndex = static_cast<uint32_t>(verts.size());
 					for (int v = 0; v < 4; v++){
 						Vertex vert;
-						vert.pos = glm::vec3(x, y, z) + faceVertices[f][v] + glm::vec3(chunk.chunkPos * CHUNK_SIZE);
+						vert.pos = glm::vec3(WorldX, WorldY, WorldZ) + faceVertices[f][v];
 						vert.normal = glm::vec3(n);
 						vert.color = {1.0f,1.0f,1.0f};
 						vert.texCoord = uvFace[v];
@@ -520,7 +523,6 @@ void World::setBlock(int x, int y, int z, int blockType) {
 void World::cleanup() {
 	for (auto& [pos, chunkPtr] : chunks) destroyChunkBuffers(*chunkPtr);
 	chunks.clear();
-	//std::cout << "buffer_removed" << std::endl;
 
 	for (size_t i = 0; i < descriptorSets.size(); ++i) {
 		if (uniformBuffersMapped[i]) {
@@ -662,12 +664,131 @@ int World::getTerrainHeight(int x, int z) {
 
 void World::chunkBuilderLoop() {
 	while (chunkBuilderActive) {
-		auto reqChunk = reqChunks.try_pop();
-		if (!reqChunk.has_value()) {
+		auto requestedChunk = reqChunks.try_pop();
+		if (!requestedChunk.has_value()) {
 			std::this_thread::sleep_for(std::chrono::milliseconds(10));
 			continue;
 		}
-		glm::ivec3 reqChunkPos = reqChunk.value();
-		createdChunks.push({ reqChunkPos, std::move(generateChunk(reqChunkPos)) });
+		glm::ivec3 reqChunkPos = requestedChunk.value();
+		std::unique_ptr<Chunk> chunk = generateChunk(reqChunkPos);
+		{
+			std::lock_guard<std::mutex> lock(stagingMutex);
+			stagingChunks[reqChunkPos] = std::move(chunk);
+		}
+		generatedQueue.push(reqChunkPos);
 	}
+}
+
+void World::chunkMesherLoop() {
+	while (chunkBuilderActive) {
+		auto maybeChunkPos = generatedQueue.try_pop();
+		if (!maybeChunkPos.has_value()) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(5));
+			continue;
+		}
+		glm::ivec3 pos = maybeChunkPos.value();
+		if (!neighborsReady_local(this, pos)) {
+			generatedQueue.push(pos);
+			std::this_thread::sleep_for(std::chrono::milliseconds(2));
+			continue;
+		}
+		
+		Chunk* chunkPtr = nullptr;
+		{
+			std::lock_guard<std::mutex> lock(stagingMutex);
+			auto it = stagingChunks.find(pos);
+			if (it == stagingChunks.end()) {
+				continue;
+			}
+			chunkPtr = it->second.get();
+		}
+		Mesh mesh;
+		Mesher(*chunkPtr, mesh.vertices, mesh.indices);
+
+		MeshJob job;
+		job.pos = pos;
+		job.mesh = std::move(mesh);
+		meshedChunks.push(std::move(job));
+	}
+}
+
+void World::captureGenratedChunks() {
+	auto opt = meshedChunks.try_pop();
+	while (opt.has_value()) {
+		MeshJob job = std::move(opt.value());
+
+		std::unique_ptr<Chunk> chunkPtr;
+		{
+			std::lock_guard<std::mutex> lock(stagingMutex);
+			auto it = stagingChunks.find(job.pos);
+			if (it == stagingChunks.end()) {
+				opt = meshedChunks.try_pop();
+				continue;
+			}
+			chunkPtr = std::move(it->second);
+			stagingChunks.erase(it);
+		}
+		{
+			std::lock_guard<std::mutex> lock(chunkMutex);
+			chunks[job.pos] = std::move(chunkPtr);
+			chunks[job.pos]->chunkMesh = std::move(job.mesh);
+			chunks[job.pos]->dirty = true;
+		}
+		//possible here - chunk upload code.
+		opt = meshedChunks.try_pop();
+	}
+}
+
+void World::reqProximityChunks(const glm::vec3& pos) {
+	for (int i = -renderDistance; i < renderDistance; i++)
+		for (int j = -renderDistance; j < renderDistance; j++) {
+			if ((i * i) + (j * j) <= (renderDistance * renderDistance)) {
+				glm::ivec3 proxChunk = { pos.x / CHUNK_SIZE + i, 0, pos.z / CHUNK_SIZE + j };
+				if (chunks.find(proxChunk) == chunks.end()) reqChunks.push(proxChunk);
+				std::cout << "requested chunk : [" << proxChunk.x << "," << proxChunk.z << "]" << std::endl;
+			}
+		}
+}
+
+void World::requestChunk(const glm::ivec3& pos) {
+	{
+		std::lock_guard<std::mutex> lock1(chunkMutex);
+		if (chunks.find(pos) != chunks.end()) return;
+	}
+	{
+		std::lock_guard<std::mutex> lock2(stagingMutex);
+		if (stagingChunks.find(pos) != stagingChunks.end()) return;
+	}
+	reqChunks.push(pos);
+}
+
+Chunk* World::findChunk(const glm::ivec3& pos) {
+	{
+		std::lock_guard<std::mutex> lock1(chunkMutex);
+		auto it = chunks.find(pos);
+		if (it != chunks.end()) return it->second.get();
+	}
+	{
+		std::lock_guard<std::mutex> lock2(stagingMutex);
+		auto it = stagingChunks.find(pos);
+		if (it != stagingChunks.end()) return it->second.get();
+	}
+	return nullptr;
+}
+
+bool World::chunkShouldExist(const glm::ivec3& pos) {
+	int dx = pos.x - playerChunk.x;
+	int dz = pos.z - playerChunk.z;
+	return ((dx * dx) + (dz * dz)) <= (renderDistance * renderDistance);
+}
+
+bool World::neighborsReady_local(World* world, const glm::ivec3& pos) {
+	static const glm::ivec3 dirs[4] = { {1,0,0}, {-1,0,0}, {0,0,1}, {0,0,-1} };
+	for (auto& d : dirs) {
+		glm::ivec3 npos = pos + d;
+		if (world->chunkShouldExist(npos)) {
+			if (!world->findChunk(npos)) return false;
+		}
+	}
+	return true;
 }

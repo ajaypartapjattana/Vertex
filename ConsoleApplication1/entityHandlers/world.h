@@ -7,12 +7,11 @@
 #include <vulkan/vulkan.h>
 
 #include "renderer/utility/Vertex.h"
+#include "renderer/utility/Chunk.h"
 #include "renderer/utility/VulkanUtils.h"
 #include "commProtocols/threadCommProtocol.h"
 
 #include "FastNoiseLite.h"
-
-constexpr int CHUNK_SIZE = 16;
 
 struct World_UBO {
 	alignas(16) glm::mat4 model;
@@ -39,42 +38,6 @@ struct TextureAtlas {
 	std::vector<unsigned char> pixels;
 };
 
-struct Mesh {
-	std::vector<Vertex> vertices;
-	std::vector<uint32_t> indices;
-};
-
-struct Chunk {
-	glm::ivec3 chunkPos{};
-
-	uint8_t voxels[CHUNK_SIZE][CHUNK_SIZE][CHUNK_SIZE] = { 0 };
-
-	Mesh chunkMesh;
-
-	VkBuffer vertexBuffer = VK_NULL_HANDLE;
-	VkBuffer indexBuffer = VK_NULL_HANDLE;
-	VkDeviceMemory vertexMemory = VK_NULL_HANDLE;
-	VkDeviceMemory indexMemory = VK_NULL_HANDLE;
-
-	bool dirty = true;
-	bool gpuAllocated = false;
-};
-
-struct IVec3Hash {
-	std::size_t operator()(const glm::ivec3& v) const noexcept {
-		size_t h1 = std::hash<int>()(v.x);
-		size_t h2 = std::hash<int>()(v.y);
-		size_t h3 = std::hash<int>()(v.z);
-		return ((h1 ^ (h2 << 1)) >> 1 ) ^ (h3 << 1);
-	}
-};
-
-struct IVec3Equal {
-	bool operator()(const glm::ivec3& a, const glm::ivec3& b) const noexcept {
-		return a.x == b.x && a.y == b.y && a.z == b.z;
-	}
-};
-
 struct genratedChunk {
 	glm::ivec3 pos;
 	std::unique_ptr<Chunk> chunk;
@@ -86,10 +49,12 @@ public:
 	World(VkDevice device, VkPhysicalDevice physicalDevice, VkQueue queue, VkCommandPool commandPool, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT);
 	~World();
 
-	void reqProximityChunks(const glm::vec3& pos, const uint8_t& renderDistance);
+	void reqProximityChunks(const glm::vec3& pos);
 	void captureGenratedChunks();
 
-	std::unique_ptr<Chunk> generateChunk(const glm::ivec3& pos);
+	bool chunkShouldExist(const glm::ivec3& pos);
+	Chunk* findChunk(const glm::ivec3& pos);
+
 	void updateChunkMesh(const glm::ivec3& pos);
 	void uploadChunkToGPU(Chunk& chunk);
 	void createTextureImage(TextureAtlas atlas);
@@ -102,6 +67,9 @@ public:
 	void cleanup();
 
 	float heightMultiplier = 20.0f;
+
+	glm::ivec3 playerChunk = { 0,0,0 };
+	int renderDistance = 4;
 
 private:
 	VkDevice device;
@@ -123,8 +91,6 @@ private:
 	std::vector<VkDeviceMemory> uniformBuffersMemory;
 	std::vector<void*> uniformBuffersMapped;
 	
-	std::unordered_map<glm::ivec3, std::unique_ptr<Chunk>, IVec3Hash, IVec3Equal> chunks;
-
 	void createDescriptorPool(VkDevice device, uint16_t MAX_FRAMES_IN_FLIGHT);
 	void createWorldDescriptorSet(VkDevice device, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT);
 	void createWorldUniformBuffer(VkDevice device, VkPhysicalDevice physicalDevice, uint16_t MAX_FRAMES_IN_FLIGHT);
@@ -140,9 +106,24 @@ private:
 	void createChunkBuffers(Chunk& chunk);
 	void destroyChunkBuffers(Chunk& chunk);
 
+	std::unique_ptr<Chunk> generateChunk(const glm::ivec3& pos);
+
 	std::atomic<bool> chunkBuilderActive;
 	ThreadSafeQueue<glm::ivec3> reqChunks;
-	ThreadSafeQueue<genratedChunk> createdChunks;
-	std::thread ChunkBuilder;
+
+	std::unordered_map<glm::ivec3, std::unique_ptr<Chunk>, IVec3Hash, IVec3Equal> chunks;
+	std::unordered_map<glm::ivec3, std::unique_ptr<Chunk>, IVec3Hash, IVec3Equal> stagingChunks;
+	std::mutex chunkMutex;
+	std::mutex stagingMutex;
+
+	std::thread ChunkGenerator;
 	void chunkBuilderLoop();
+	ThreadSafeQueue<glm::ivec3> generatedQueue;
+
+	bool neighborsReady_local(World* world, const glm::ivec3& pos);
+	std::thread ChunkMesher;
+	void chunkMesherLoop();
+	ThreadSafeQueue<MeshJob> meshedChunks;
+
+	void requestChunk(const glm::ivec3& pos);
 };

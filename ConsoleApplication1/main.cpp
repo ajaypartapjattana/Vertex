@@ -747,16 +747,16 @@ private:
         vertexInput.attributes.insert(vertexInput.attributes.end(), attrib.begin(), attrib.end());
 
         PipelineDescription pipeFill_Desc{};
-        pipeFill_Desc.vertShaderPath = "shaders/vert.spv";
-        pipeFill_Desc.fragShaderPath = "shaders/frag.spv";
+        pipeFill_Desc.vertShaderPath = "shaders/basic.vert.spv";
+        pipeFill_Desc.fragShaderPath = "shaders/basic.frag.spv";
         pipeFill_Desc.renderPass = renderPass;
         pipeFill_Desc.pipelineLayout = pipelineLayout;
         pipeFill_Desc.vertexInput = vertexInput;
         pipeFill_Desc.cullMode = VK_CULL_MODE_NONE;
 
         PipelineDescription pipeEdge_Desc{};
-        pipeEdge_Desc.vertShaderPath = "shaders/vert.spv";
-        pipeEdge_Desc.fragShaderPath = "shaders/frag.spv";
+        pipeEdge_Desc.vertShaderPath = "shaders/basic.vert.spv";
+        pipeEdge_Desc.fragShaderPath = "shaders/basic.frag.spv";
         pipeEdge_Desc.renderPass = renderPass;
         pipeEdge_Desc.pipelineLayout = pipelineLayout;
         pipeEdge_Desc.vertexInput = vertexInput;
@@ -764,8 +764,8 @@ private:
         pipeEdge_Desc.cullMode = VK_CULL_MODE_NONE;
 
         PipelineDescription pipePoint_Desc{};
-        pipePoint_Desc.vertShaderPath = "shaders/vert.spv";
-        pipePoint_Desc.fragShaderPath = "shaders/frag.spv";
+        pipePoint_Desc.vertShaderPath = "shaders/basic.vert.spv";
+        pipePoint_Desc.fragShaderPath = "shaders/basic.frag.spv";
         pipePoint_Desc.renderPass = renderPass;
         pipePoint_Desc.pipelineLayout = pipelineLayout;
         pipePoint_Desc.vertexInput = vertexInput;
@@ -1123,12 +1123,12 @@ private:
             ImGui::EndCombo();
         }
 
-        if (ImGui::Button("add chunk", ImVec2(50.0f, 20.0f))) {
-            world->reqProximityChunks(camera.getPosition(), 8);
-            //static int cx = 0, cz = 0;
-            //world->generateChunk({ cx++, 0, cz++ });
+        if (ImGui::Button("generate chunks", ImVec2(100.0f, 20.0f))) {
+            world->reqProximityChunks(camera.getPosition());
         }
 
+        glm::vec3 pos = camera.getPosition();
+        ImGui::Text("Pos: %.2f %.2f %.2f", pos.x, pos.y, pos.z);
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
         ImGui::Checkbox("enableSmoothNormals", &sceneRenderState.smoothNormals);
         ImGui::Checkbox("Textures", &sceneRenderState.enableTextures);
