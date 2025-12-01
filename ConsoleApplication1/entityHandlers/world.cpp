@@ -17,7 +17,7 @@
 World::World(VkDevice device, VkPhysicalDevice physicalDevice, VkQueue queue, VkCommandPool commandPool, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT)
 	: chunkBuilderActive(true), ChunkGenerator(&World::chunkBuilderLoop, this), ChunkMesher(&World::chunkMesherLoop, this), device(device), physicalDevice(physicalDevice), queue(queue), commandPool(commandPool) {
 	heightMap.SetNoiseType(FastNoiseLite::NoiseType_Perlin);
-	heightMap.SetFrequency(0.1f);
+	heightMap.SetFrequency(0.01f);
 
 	createDescriptorPool(device, FRAMES_IN_FLIGHT);
 
@@ -59,7 +59,7 @@ World::~World() {
 std::unique_ptr<Chunk> World::generateChunk(const glm::ivec3& pos) {
 	if (chunks.find(pos) != chunks.end()) return nullptr;
 
-	std::cout << "genrating chunk at : [" << pos.x << "," << pos.z << "]" << std::endl;
+	//std::cout << "genrating chunk at : [" << pos.x << "," << pos.z << "]" << std::endl;
 
 	auto chunk = std::make_unique<Chunk>();
 	chunk->chunkPos = pos;
@@ -76,10 +76,10 @@ std::unique_ptr<Chunk> World::generateChunk(const glm::ivec3& pos) {
 
 			int terrainHeight = getTerrainHeight(worldX, worldZ);
 
-			for (int y = 0; y < CHUNK_SIZE; y++) {
+			for (int y = 0; y < CHUNK_HEIGHT; y++) {
 				if (y < terrainHeight - 3) chunk->voxels[x][y][z] = 1;
 				else if (y < terrainHeight) chunk->voxels[x][y][z] = 3;
-				else if (y == terrainHeight) chunk->voxels[x][y][z] = 2;
+				else if (y == terrainHeight) chunk->voxels[x][y][z] = 1;
 				else chunk->voxels[x][y][z] = 0;
 			}
 		}
@@ -96,7 +96,7 @@ std::unique_ptr<Chunk> World::generateChunk(const glm::ivec3& pos) {
 void World::Mesher(const Chunk& chunk, std::vector<Vertex>& verts, std::vector<uint32_t>& indices)
 {
 	glm::ivec3 pos = chunk.chunkPos;
-	std::cout << "Meshing chunk: [" << pos.x << "," << pos.z << "]" << std::endl;
+	//std::cout << "Meshing chunk: [" << pos.x << "," << pos.z << "]" << std::endl;
 
 	verts.clear();
 	indices.clear();
@@ -142,7 +142,7 @@ void World::Mesher(const Chunk& chunk, std::vector<Vertex>& verts, std::vector<u
 	int baseWZ = pos.z * CHUNK_SIZE;
 
 	for (int x = 0; x < CHUNK_SIZE; x++){
-		for (int y = 0; y < CHUNK_SIZE; y++){
+		for (int y = 0; y < CHUNK_HEIGHT; y++){
 			for (int z = 0; z < CHUNK_SIZE; z++){
 				uint8_t block = chunk.get(x, y, z);
 				if (!block) continue;
@@ -194,141 +194,201 @@ void World::GreedyMesher(const Chunk& chunk, std::vector<Vertex>& verts, std::ve
 	verts.clear();
 	indices.clear();
 
-	auto isSolid = [&](int x, int y, int z) {
-		if (x < 0 || y < 0 || z < 0) return false;
-		if (x >= CHUNK_SIZE || y >= CHUNK_SIZE || z >= CHUNK_SIZE) return false;
-		return chunk.voxels[x][y][z] != 0;
+	const glm::ivec3 cpos = chunk.chunkPos;
+	const glm::vec3 base = glm::vec3(cpos * CHUNK_SIZE);
+
+	// World-space solid checker
+	auto isSolid = [&](int wx, int wy, int wz)
+		{
+			if (wy < 0 || wy >= CHUNK_SIZE) return false;
+
+			int cx = floor(wx / float(CHUNK_SIZE));
+			int cz = floor(wz / float(CHUNK_SIZE));
+
+			glm::ivec3 p(cx, 0, cz);
+			auto it = chunks.find(p);
+			if (it == chunks.end())
+				return false;
+
+			Chunk* ch = it->second.get();
+
+			int lx = wx - cx * CHUNK_SIZE;
+			int lz = wz - cz * CHUNK_SIZE;
+
+			if (lx < 0 || lx >= CHUNK_SIZE ||
+				lz < 0 || lz >= CHUNK_SIZE)
+				return false;
+
+			return ch->voxels[lx][wy][lz] != 0;
 		};
 
-	// Face directions (axis, direction)
-	struct Axis { int u, v, w; }; // u=0/1/2 means x/y/z
-
-	// 3 axis sweeps: Z, Y, X
-	const Axis axes[3] = {
-		{0, 1, 2},  // sweep Z, build XY quads
-		{0, 2, 1},  // sweep Y, build XZ quads
-		{1, 2, 0}   // sweep X, build YZ quads
+	// 6 directions
+	const glm::ivec3 normals[6] = {
+		{ 1,0,0 }, { -1,0,0 },
+		{ 0,1,0 }, { 0,-1,0 },
+		{ 0,0,1 }, { 0,0,-1 }
 	};
 
-	for (int a = 0; a < 3; a++)
+	const glm::ivec3 U[6] = {
+		{0,1,0}, {0,1,0},
+		{1,0,0}, {1,0,0},
+		{1,0,0}, {1,0,0}
+	};
+
+	const glm::ivec3 V[6] = {
+		{0,0,1}, {0,0,1},
+		{0,0,1}, {0,0,1},
+		{0,1,0}, {0,1,0}
+	};
+
+	// Process each face
+	for (int f = 0; f < 6; f++)
 	{
-		int U = axes[a].u;
-		int V = axes[a].v;
-		int W = axes[a].w;
+		glm::ivec3 n = normals[f];
+		glm::ivec3 u = U[f];
+		glm::ivec3 v = V[f];
 
-		int size[3] = { CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE };
+		int du[3] = { u.x, u.y, u.z };
+		int dv[3] = { v.x, v.y, v.z };
 
-		// Allocate a mask for the current slice
-		std::vector<int> mask(size[U] * size[V]);
+		int nx = n.x, ny = n.y, nz = n.z;
 
-		// Sweep the slice along W axis
-		for (int w = -1; w < size[W]; w++)
+		uint8_t mask[CHUNK_SIZE * CHUNK_SIZE];
+
+		// Sweep along normal direction
+		for (int d = 0; d < CHUNK_SIZE; d++)
 		{
 			// Build mask
-			int n = 0;
-			for (int v = 0; v < size[V]; v++)
+			int m = 0;
+			for (int j = 0; j < CHUNK_SIZE; j++)
 			{
-				for (int u = 0; u < size[U]; u++, n++)
+				for (int i = 0; i < CHUNK_SIZE; i++)
 				{
-					int a0[3] = { 0,0,0 };
-					int a1[3] = { 0,0,0 };
+					int x = nx ? (nx > 0 ? d : CHUNK_SIZE - 1 - d) : i;
+					int y = ny ? (ny > 0 ? d : CHUNK_SIZE - 1 - d) : j;
+					int z = nz ? (nz > 0 ? d : CHUNK_SIZE - 1 - d) : (nx ? j : i);
 
-					a0[W] = w;
-					a1[W] = w + 1;
-					a0[U] = a1[U] = u;
-					a0[V] = a1[V] = v;
+					uint8_t block = chunk.voxels[x][y][z];
 
-					bool s0 = (w >= 0) && isSolid(a0[0], a0[1], a0[2]);
-					bool s1 = (w + 1 < size[W]) && isSolid(a1[0], a1[1], a1[2]);
-
-					if (s0 == s1)
-						mask[n] = 0;     // no face between identical solidity
-					else
-						mask[n] = s0 ? 1 : -1;  // 1 = face pointing +W, -1 = face -W
-				}
-			}
-
-			// Greedy merge the mask into big rectangles
-			n = 0;
-			for (int v = 0; v < size[V]; v++)
-			{
-				for (int u = 0; u < size[U]; )
-				{
-					int c = mask[u + v * size[U]];
-					if (c == 0) {
-						u++;
+					if (!block)
+					{
+						mask[m++] = 0;
 						continue;
 					}
 
-					// Find width
-					int width = 1;
-					while (u + width < size[U] && mask[u + width + v * size[U]] == c)
-						width++;
+					int wx = cpos.x * CHUNK_SIZE + x;
+					int wy = y;
+					int wz = cpos.z * CHUNK_SIZE + z;
 
-					// Find height
-					int height = 1;
-					bool done = false;
-					while (v + height < size[V])
+					int ax = wx + nx;
+					int ay = wy + ny;
+					int az = wz + nz;
+
+					mask[m++] = isSolid(ax, ay, az) ? 0 : block;
+				}
+			}
+
+			// Greedy merge
+			m = 0;
+			for (int j = 0; j < CHUNK_SIZE; j++)
+			{
+				for (int i = 0; i < CHUNK_SIZE;)
+				{
+					uint8_t block = mask[m];
+					if (!block)
 					{
-						for (int k = 0; k < width; k++)
+						++i; ++m;
+						continue;
+					}
+
+					int w = 1;
+					while (i + w < CHUNK_SIZE && mask[m + w] == block)
+						++w;
+
+					int h = 1;
+					bool stop = false;
+					while (j + h < CHUNK_SIZE)
+					{
+						for (int k = 0; k < w; k++)
 						{
-							if (mask[u + k + (v + height) * size[U]] != c)
+							if (mask[m + k + h * CHUNK_SIZE] != block)
 							{
-								done = true;
+								stop = true;
 								break;
 							}
 						}
-						if (done) break;
-						height++;
+						if (stop) break;
+						++h;
 					}
 
-					// Generate quad from (u,v) sized (width,height)
-					int x[3] = { 0,0,0 };
-					int du[3] = { 0,0,0 };
-					int dv[3] = { 0,0,0 };
+					// Emit quad
+					glm::vec4 uv = atlas.uvRanges.at(block);
 
-					x[U] = u;      x[V] = v;      x[W] = (c > 0 ? w + 1 : w);
-					du[U] = width; du[V] = 0;      du[W] = 0;
-					dv[U] = 0;     dv[V] = height; dv[W] = 0;
+					glm::vec3 p0 =
+						base +
+						glm::vec3(nx ? (nx > 0 ? d : d + 1) : i,
+							ny ? (ny > 0 ? d : d + 1) : j,
+							nz ? (nz > 0 ? d : d + 1) : 0);
 
-					glm::vec3 p0(x[0], x[1], x[2]);
-					glm::vec3 p1(x[0] + du[0], x[1] + du[1], x[2] + du[2]);
-					glm::vec3 p2(x[0] + du[0] + dv[0], x[1] + du[1] + dv[1], x[2] + du[2] + dv[2]);
-					glm::vec3 p3(x[0] + dv[0], x[1] + dv[1], x[2] + dv[2]);
+					glm::vec3 pos = glm::vec3(cpos * CHUNK_SIZE);
 
-					glm::vec3 normal(0);
-					normal[W] = (c > 0 ? 1.0f : -1.0f);
+					glm::vec3 o =
+						glm::vec3(
+							nx ? (nx > 0 ? d : CHUNK_SIZE - d) : i,
+							ny ? (ny > 0 ? d : CHUNK_SIZE - d) : j,
+							nz ? (nz > 0 ? d : CHUNK_SIZE - d) : 0
+						);
 
-					uint32_t base = static_cast<uint32_t>(verts.size());
-					glm::vec3 color = {1.0f, 1.0f, 1.0f};
+					glm::vec3 basePos = base + o;
 
-					verts.push_back({ p0, normal, color, {0,0} });
-					verts.push_back({ p1, normal, color, {1,0} });
-					verts.push_back({ p2, normal, color, {1,1} });
-					verts.push_back({ p3, normal, color, {0,1} });
+					glm::vec3 p[4] = {
+						basePos,
+						basePos + glm::vec3(u) * (float)w,
+						basePos + glm::vec3(v) * (float)h + glm::vec3(u) * (float)w,
+						basePos + glm::vec3(v) * (float)h
+					};
 
-					indices.push_back(base + 0);
-					indices.push_back(base + 1);
-					indices.push_back(base + 2);
-					indices.push_back(base + 2);
-					indices.push_back(base + 3);
-					indices.push_back(base + 0);
+					uint32_t bi = verts.size();
 
-					// Clear the mask for the consumed area
-					for (int hv = 0; hv < height; hv++)
+					glm::vec2 uvFace[4] = {
+						{uv.x, uv.y},
+						{uv.z, uv.y},
+						{uv.z, uv.w},
+						{uv.x, uv.w}
+					};
+
+					for (int q = 0; q < 4; q++)
 					{
-						for (int hu = 0; hu < width; hu++)
-						{
-							mask[(u + hu) + (v + hv) * size[U]] = 0;
-						}
+						Vertex vert;
+						vert.pos = p[q];
+						vert.normal = glm::vec3(n);
+						vert.color = { 1,1,1 };
+						vert.texCoord = uvFace[q];
+						verts.push_back(vert);
 					}
 
-					u += width;
+					indices.push_back(bi + 0);
+					indices.push_back(bi + 1);
+					indices.push_back(bi + 2);
+					indices.push_back(bi + 2);
+					indices.push_back(bi + 3);
+					indices.push_back(bi + 0);
+
+					// Clear merged area
+					for (int a = 0; a < h; a++)
+						for (int b = 0; b < w; b++)
+							mask[m + b + a * CHUNK_SIZE] = 0;
+
+					i += w;
+					m += w;
 				}
 			}
 		}
 	}
 }
+
+
+
 
 void World::uploadChunkToGPU(Chunk& chunk) {
 	if (!chunk.dirty && chunk.chunkMesh.vertices.empty()) return;
@@ -741,13 +801,13 @@ void World::captureGenratedChunks() {
 
 void World::reqProximityChunks(const glm::vec3& pos) {
 	for (int i = -renderDistance; i < renderDistance; i++)
-		for (int j = -renderDistance; j < renderDistance; j++) {
-			if ((i * i) + (j * j) <= (renderDistance * renderDistance)) {
-				glm::ivec3 proxChunk = { pos.x / CHUNK_SIZE + i, 0, pos.z / CHUNK_SIZE + j };
-				if (chunks.find(proxChunk) == chunks.end()) reqChunks.push(proxChunk);
-				std::cout << "requested chunk : [" << proxChunk.x << "," << proxChunk.z << "]" << std::endl;
-			}
+	for (int j = -renderDistance; j < renderDistance; j++) {
+		if ((i * i) + (j * j) <= (renderDistance * renderDistance)) {
+			glm::ivec3 proxChunk = { pos.x / CHUNK_SIZE + i, 0, pos.z / CHUNK_SIZE + j };
+			if (chunks.find(proxChunk) == chunks.end()) reqChunks.push(proxChunk);
+			//std::cout << "requested chunk : [" << proxChunk.x << "," << proxChunk.z << "]" << std::endl;
 		}
+	}
 }
 
 void World::requestChunk(const glm::ivec3& pos) {
@@ -777,6 +837,7 @@ Chunk* World::findChunk(const glm::ivec3& pos) {
 }
 
 bool World::chunkShouldExist(const glm::ivec3& pos) {
+	return true;
 	int dx = pos.x - playerChunk.x;
 	int dz = pos.z - playerChunk.z;
 	return ((dx * dx) + (dz * dz)) <= (renderDistance * renderDistance);
@@ -791,4 +852,8 @@ bool World::neighborsReady_local(World* world, const glm::ivec3& pos) {
 		}
 	}
 	return true;
+}
+
+int World::getChunkCount() {
+	return static_cast<uint32_t>(chunks.size());
 }

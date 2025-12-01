@@ -6,6 +6,7 @@
 #include "Vertex.h"
 
 constexpr int CHUNK_SIZE = 16;
+constexpr int CHUNK_HEIGHT = 256;
 
 struct Mesh {
 	std::vector<Vertex> vertices;
@@ -20,7 +21,7 @@ struct MeshJob{
 struct Chunk {
 	glm::ivec3 chunkPos{};
 
-	uint8_t voxels[CHUNK_SIZE][CHUNK_SIZE][CHUNK_SIZE] = { 0 };
+	uint8_t voxels[CHUNK_SIZE][CHUNK_HEIGHT][CHUNK_SIZE] = { 0 };
 
 	Mesh chunkMesh;
 
@@ -33,7 +34,7 @@ struct Chunk {
 	bool gpuAllocated = false;
 
 	inline uint8_t get(int x, int y, int z) const {
-		if (x < 0 || x >= CHUNK_SIZE || y < 0 || y >= CHUNK_SIZE || z < 0 || z >= CHUNK_SIZE) return 0;
+		if (x < 0 || x >= CHUNK_SIZE || y < 0 || y >= CHUNK_HEIGHT || z < 0 || z >= CHUNK_SIZE) return 0;
 		return voxels[x][y][z];
 	}
 };

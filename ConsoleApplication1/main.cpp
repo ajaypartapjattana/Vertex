@@ -158,7 +158,7 @@ private:
     GuiLayer gui;
     ModelManager modelManager;
     std::unique_ptr<World> world;
-    Camera camera{glm::vec3(2.0f, 2.0f, 2.0f), (float)swapChainExtent.width/swapChainExtent.width};
+    Camera camera{glm::vec3(0.0f, 100.0f, 0.0f), (float)swapChainExtent.width/swapChainExtent.width};
     TransformController transformController;
 
     RenderState sceneRenderState{ true, false, false, glm::vec3(0.5f, 1.0f, 0.3f), glm::vec3(1.0f, 1.0f, 1.0f) };
@@ -1130,6 +1130,7 @@ private:
         glm::vec3 pos = camera.getPosition();
         ImGui::Text("Pos: %.2f %.2f %.2f", pos.x, pos.y, pos.z);
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+        ImGui::Text("Chunk Count: %d", world->getChunkCount());
         ImGui::Checkbox("enableSmoothNormals", &sceneRenderState.smoothNormals);
         ImGui::Checkbox("Textures", &sceneRenderState.enableTextures);
         ImGui::Checkbox("saveData at termination", &sceneRenderState.saveModelData);

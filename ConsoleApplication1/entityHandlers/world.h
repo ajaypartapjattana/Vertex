@@ -49,6 +49,7 @@ public:
 	World(VkDevice device, VkPhysicalDevice physicalDevice, VkQueue queue, VkCommandPool commandPool, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT);
 	~World();
 
+	int getChunkCount();
 	void reqProximityChunks(const glm::vec3& pos);
 	void captureGenratedChunks();
 
@@ -66,10 +67,10 @@ public:
 	
 	void cleanup();
 
-	float heightMultiplier = 20.0f;
+	float heightMultiplier = 50.0f;
 
 	glm::ivec3 playerChunk = { 0,0,0 };
-	int renderDistance = 4;
+	int renderDistance = 32;
 
 private:
 	VkDevice device;
