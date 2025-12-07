@@ -8,8 +8,8 @@
 #include <fstream>
 #include <cstring>
 
-using PipelineHandle = uint32_t;
-static const PipelineHandle INVALID_PIPELINE = UINT32_MAX;
+using PipelineID = uint32_t;
+static const PipelineID INVALID_PIPELINE = UINT32_MAX;
 
 struct PipelineVertexInput {
 	std::vector<VkVertexInputBindingDescription> bindings;
@@ -45,11 +45,11 @@ struct Pipeline {
 
 class PipelineManager {
 public:
-	void PipelineManager_init(VkDevice device);
+	PipelineManager(VkDevice device);
 	~PipelineManager();
 
-	PipelineHandle createPipleine(const PipelineDescription& desc);
-	Pipeline& get(PipelineHandle handle);
+	PipelineID createPipleine(const PipelineDescription& desc);
+	Pipeline& get(PipelineID handle);
 	void destroyAll();
 private:
 	std::vector<Pipeline> pipelines;

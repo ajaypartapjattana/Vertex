@@ -14,6 +14,6 @@ namespace VulkanUtils {
     void copyBufferToImage(VkDevice device, VkQueue queue, VkCommandPool commandPool, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
     void createTextureImageView(VkDevice, VkImage textureImage, VkImageView& textureImageView);
     VkImageView createImageView(VkDevice device, VkImage image, VkFormat format, VkImageAspectFlags aspectFlags);
-    void createTextureSampler(VkDevice device, VkPhysicalDevice physicalDevice, VkSampler& textureSampler);
+    void createTextureSampler(VkDevice device, VkPhysicalDevice physicalDevice, VkSampler& textureSampler, VkFilter filtering);
     bool hasStencilComponent(VkFormat format);
 }

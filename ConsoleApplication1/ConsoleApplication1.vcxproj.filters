@@ -63,7 +63,16 @@
     <ClCompile Include="entityHandlers\world.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="entityHandlers\renderer\PipelineManager.cpp">
+    <ClCompile Include="entityHandlers\renderer\pipelines.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="entityHandlers\renderer\materials.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="entityHandlers\renderer\VulkanContext.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="windowSurface.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -101,7 +110,7 @@
     <ClInclude Include="entityHandlers\world.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="entityHandlers\renderer\pipelineManager.h">
+    <ClInclude Include="entityHandlers\renderer\pipelines.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="entityHandlers\renderer\utility\stb_image_write.h">
@@ -113,10 +122,24 @@
     <ClInclude Include="entityHandlers\renderer\utility\Chunk.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="player.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="entityHandlers\renderer\materials.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="entityHandlers\renderer\VulkanContext.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="windowSurface.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="ShaderBuild.targets" />
     <None Include="shaders\basic.frag" />
     <None Include="shaders\basic.vert" />
+    <None Include="shaders\sphere.vert" />
+    <None Include="shaders\parabolic.vert" />
   </ItemGroup>
 </Project>

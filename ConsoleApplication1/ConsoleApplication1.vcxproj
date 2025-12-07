@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -72,10 +72,10 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <TargetName>Vertex</TargetName>
+    <TargetName>Vortx</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <TargetName>Vertex</TargetName>
+    <TargetName>Vortx</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -143,6 +143,7 @@
     <ClCompile Include="Controllers\Camera.cpp" />
     <ClCompile Include="Controllers\transformController.cpp" />
     <ClCompile Include="Controllers\Utilities\vecMath.cpp" />
+    <ClCompile Include="entityHandlers\renderer\materials.cpp" />
     <ClCompile Include="entityHandlers\world.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="GuiLayer.cpp" />
@@ -156,10 +157,15 @@
     <ClCompile Include="entityHandlers\model.cpp" />
     <ClCompile Include="entityHandlers\ModelManager.cpp" />
     <ClCompile Include="entityHandlers\renderer\utility\VulkanUtils.cpp" />
-    <ClCompile Include="entityHandlers\renderer\PipelineManager.cpp" />
+    <ClCompile Include="entityHandlers\renderer\pipelines.cpp" />
+    <ClCompile Include="entityHandlers\renderer\VulkanContext.cpp" />
+    <ClCompile Include="windowSurface.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Controllers\Camera.h" />
+    <ClInclude Include="entityHandlers\renderer\materials.h" />
+    <ClInclude Include="entityHandlers\renderer\VulkanContext.h" />
+    <ClInclude Include="player.h" />
     <ClInclude Include="Controllers\transformController.h" />
     <ClInclude Include="Controllers\Utilities\vecMath.h" />
     <ClInclude Include="entityHandlers\FastNoiseLite.h" />
@@ -173,12 +179,15 @@
     <ClInclude Include="entityHandlers\commProtocols\threadCommProtocol.h" />
     <ClInclude Include="entityHandlers\renderer\utility\Vertex.h" />
     <ClInclude Include="entityHandlers\renderer\utility\VulkanUtils.h" />
-    <ClInclude Include="entityHandlers\renderer\pipelineManager.h" />
+    <ClInclude Include="entityHandlers\renderer\pipelines.h" />
+    <ClInclude Include="windowSurface.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="ShaderBuild.targets" />
     <None Include="shaders\basic.frag" />
     <None Include="shaders\basic.vert" />
+    <None Include="shaders\parabolic.vert" />
+    <None Include="shaders\sphere.vert" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Import Project="$(MSBuildProjectDirectory)\ShaderBuild.targets" />

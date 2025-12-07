@@ -183,7 +183,7 @@ void Model::createTexture(VkDevice device, VkPhysicalDevice physicalDevice, VkCo
     vkFreeMemory(device, stagingBufferMemory, nullptr);
 
     textureImageView = VulkanUtils::createImageView(device, textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
-    VulkanUtils::createTextureSampler(device, physicalDevice, textureSampler);
+    VulkanUtils::createTextureSampler(device, physicalDevice, textureSampler, VK_FILTER_LINEAR);
 }
 
 void Model::createUniformBuffer(VkDevice device, VkPhysicalDevice physicalDevice, uint16_t MAX_FRAMES_IN_FLIGHT) {

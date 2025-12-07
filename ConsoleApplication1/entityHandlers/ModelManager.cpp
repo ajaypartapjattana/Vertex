@@ -1,10 +1,20 @@
 #include "ModelManager.h"
 
-void ModelManager::update(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT) {
+ModelManager::ModelManager(ContextHandle handle) :
+	running(true), loaderThread(&ModelManager::loaderLoop, this) {
+	device = handle.device;
+	physicalDevice = handle.physicalDevice;
+	queue = handle.graphicsQueue;
+	commandPool = handle.commandPool;
+	descriptorSetLayout = handle.descriptorSetLayout;
+	FRAMES_IN_FLIGHT = handle.MAX_FRAMES_IN_FLIGHT;
+}
+
+void ModelManager::update() {
 	auto maybeModel = loadedModels.try_pop();
 	while (maybeModel.has_value()) {
 		auto model = std::move(maybeModel.value());
-		createLoadedModel(*model, device, physicalDevice, commandPool, queue, descriptorSetLayout, FRAMES_IN_FLIGHT);
+		uploadModelToGPU(*model);
 		models.push_back(std::move(model));
 
 		maybeModel = loadedModels.try_pop();
@@ -14,15 +24,15 @@ void ModelManager::update(VkDevice device, VkPhysicalDevice physicalDevice, VkCo
 std::unique_ptr<Model> ModelManager::loadModelData(const std::string& obj_path, const std::string& texture_path) {
 	auto model = std::make_unique<Model>();
 	model->loadFromFile(obj_path);
-	model->obj_path = obj_path;
-	model->texture_path = texture_path;
+	model->obj_Path = obj_path;
+	model->Cmap_Path = texture_path;
 	return model;
 }
 
-void ModelManager::createLoadedModel(Model& model, VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT) {
+void ModelManager::uploadModelToGPU(Model& model) {
 	model.createBuffer(device, physicalDevice, commandPool, queue);
 	model.createDescriptorPool(device, FRAMES_IN_FLIGHT);
-	model.createTexture(device, physicalDevice, commandPool, queue, model.texture_path);
+	model.createTexture(device, physicalDevice, commandPool, queue, model.Cmap_Path);
 	model.createUniformBuffer(device, physicalDevice, FRAMES_IN_FLIGHT);
 	model.createDescriptorSet(device, descriptorSetLayout, FRAMES_IN_FLIGHT);
 }
@@ -31,9 +41,9 @@ void ModelManager::gatherModelData(const std::string& obj_path, const std::strin
 	models.push_back(std::move(loadModelData(obj_path, texture_path)));
 }
 
-void ModelManager::updateLoadedModels(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT) {
+void ModelManager::pushModelsToGPU() {
 	for (auto& model : models) {
-		createLoadedModel(*model, device, physicalDevice, commandPool, queue, descriptorSetLayout, FRAMES_IN_FLIGHT);
+		uploadModelToGPU(*model);
 	}
 }
 
@@ -43,7 +53,7 @@ void ModelManager::drawAll(VkCommandBuffer commandbuffer, VkPipelineLayout pipel
 	}
 }
 
-void ModelManager::cleanUp(VkDevice device) {
+void ModelManager::cleanUp() {
 	for (auto& model : models) {
 		model->cleanup(device);
 	}
@@ -51,7 +61,7 @@ void ModelManager::cleanUp(VkDevice device) {
 	models.clear();
 }
 
-void ModelManager::destroyModel(Model* model, VkDevice device) {
+void ModelManager::destroyModel(Model* model) {
 	if (!model) return;
 	vkDeviceWaitIdle(device);
 	model->cleanup(device);
@@ -111,4 +121,8 @@ void ModelManager::loaderLoop() {
 	}
 }
 
-//added multithreaded model loader
+ModelManager::~ModelManager() {
+	running = false;
+	if (loaderThread.joinable()) loaderThread.join();
+	cleanUp();
+}

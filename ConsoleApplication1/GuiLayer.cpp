@@ -4,17 +4,19 @@
 
 #include <array>
 
-void GuiLayer::init(VkInstance instance, VkDevice device, VkPhysicalDevice physicalDevice, uint32_t queueFamily, VkQueue queue, VkRenderPass renderPass, size_t imageCount, GLFWwindow* window) {
+void GuiLayer::init(ContextHandle handle, uint32_t queueFamily, size_t imageCount, GLFWwindow* window) {
+	device = handle.device;
+
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGui::StyleColorsClassic();
 
 	ImGui_ImplGlfw_InitForVulkan(window, true);
 
-    std::array<VkDescriptorPoolSize, 2> poolSizes = {
-        VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000},
-        VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000}
-    };
+	std::array<VkDescriptorPoolSize, 2> poolSizes = {
+		VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000},
+		VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000}
+	};
 	VkDescriptorPoolCreateInfo createInfo{};
 	createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 	createInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
@@ -22,21 +24,22 @@ void GuiLayer::init(VkInstance instance, VkDevice device, VkPhysicalDevice physi
 	createInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
 	createInfo.pPoolSizes = poolSizes.data();
 
-	vkCreateDescriptorPool(device, &createInfo, nullptr, &GuiDescriptorPool);
+	vkCreateDescriptorPool(handle.device, &createInfo, nullptr, &GuiDescriptorPool);
 
 	ImGui_ImplVulkan_InitInfo initInfo{};
-	initInfo.Instance = instance;
-	initInfo.PhysicalDevice = physicalDevice;
+	initInfo.Instance = handle.instance;
+	initInfo.PhysicalDevice = handle.physicalDevice;
 	initInfo.Device = device;
 	initInfo.QueueFamily = queueFamily;
-	initInfo.Queue = queue;
+	initInfo.Queue = handle.graphicsQueue;
 	initInfo.DescriptorPool = GuiDescriptorPool;
 	initInfo.MinImageCount = static_cast<uint32_t>(imageCount);
 	initInfo.ImageCount = static_cast<uint32_t>(imageCount);
-	initInfo.RenderPass = renderPass;
+	initInfo.RenderPass = handle.renderPass;
 
 	ImGui_ImplVulkan_Init(&initInfo);
 }
+
 void GuiLayer::beginFrame() {
 	ImGui_ImplVulkan_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
@@ -48,7 +51,7 @@ void GuiLayer::endFrame(VkCommandBuffer commandBuffer) {
 	ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
 }
 
-void GuiLayer::cleanup(VkDevice device) {
+GuiLayer::~GuiLayer() {
 	ImGui_ImplVulkan_Shutdown();
 	ImGui_ImplGlfw_Shutdown();
 	ImGui::DestroyContext();

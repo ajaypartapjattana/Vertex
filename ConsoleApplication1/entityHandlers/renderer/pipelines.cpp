@@ -1,6 +1,6 @@
-#include "pipelineManager.h"
+#include "pipelines.h"
 
-void PipelineManager::PipelineManager_init(VkDevice device){
+PipelineManager::PipelineManager(VkDevice device){
 	PipelineManager::device = device;
 	VkPipelineCacheCreateInfo cacheInfo{};
 	cacheInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
@@ -21,7 +21,7 @@ PipelineManager::~PipelineManager() {
 	}
 }
 
-PipelineHandle PipelineManager::createPipleine(const PipelineDescription& desc) {
+PipelineID PipelineManager::createPipleine(const PipelineDescription& desc) {
 	if (desc.renderPass == VK_NULL_HANDLE) throw std::runtime_error("createPipeline: renderPass is null!");
 	if (desc.pipelineLayout == VK_NULL_HANDLE) throw std::runtime_error("createPipeline: pipelineLayout is null!");
 
@@ -146,10 +146,10 @@ PipelineHandle PipelineManager::createPipleine(const PipelineDescription& desc) 
 
 	pipelines.push_back(pipe);
 
-	return static_cast<PipelineHandle>(pipelines.size() - 1);
+	return static_cast<PipelineID>(pipelines.size() - 1);
 }
 
-Pipeline& PipelineManager::get(PipelineHandle handle) {
+Pipeline& PipelineManager::get(PipelineID handle) {
 	if (handle == INVALID_PIPELINE || handle >= pipelines.size()) throw std::runtime_error("invalid pipeline handle!");
 	return pipelines[handle];
 

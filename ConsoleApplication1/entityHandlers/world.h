@@ -11,6 +11,8 @@
 #include "renderer/utility/VulkanUtils.h"
 #include "commProtocols/threadCommProtocol.h"
 
+#include "renderer/VulkanContext.h"
+
 #include "FastNoiseLite.h"
 
 struct World_UBO {
@@ -21,12 +23,23 @@ struct World_UBO {
 	alignas(16) glm::vec4 lightDir;
 	alignas(16) glm::vec4 lightColor;
 
+	alignas(16) glm::vec4 cameraPos;
+
+	alignas(16) glm::vec4 sphereInfo;
+
 	alignas(16) int selected;
+	int _pad[3];
+};
+
+struct WorldRenderState {
+	float worldCurvature;
+	float radius;
 };
 
 struct BlockData {
 	std::string name;
-	std::string filePath;
+	std::string ColorMap;
+	std::string NormalMap;
 	int index;
 };
 
@@ -35,7 +48,8 @@ struct TextureAtlas {
 	int atlasHeight;
 	int tileSize;
 	std::unordered_map<uint8_t, glm::vec4> uvRanges;
-	std::vector<unsigned char> pixels;
+	std::vector<unsigned char> ColorData;
+	std::vector<unsigned char> NormalData;
 };
 
 struct genratedChunk {
@@ -45,20 +59,21 @@ struct genratedChunk {
 
 class World {
 public:
-	PFN_vkSetDebugUtilsObjectNameEXT vkSetDebugUtilsObjectNameEXT = nullptr;
-	World(VkDevice device, VkPhysicalDevice physicalDevice, VkQueue queue, VkCommandPool commandPool, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT);
+	World(const ContextHandle& handle);
 	~World();
 
 	int getChunkCount();
 	void reqProximityChunks(const glm::vec3& pos);
 	void captureGenratedChunks();
+	void updateTerrainConstants();
+	void clearLoadedChunks();
 
 	bool chunkShouldExist(const glm::ivec3& pos);
 	Chunk* findChunk(const glm::ivec3& pos);
 
 	void updateChunkMesh(const glm::ivec3& pos);
 	void uploadChunkToGPU(Chunk& chunk);
-	void createTextureImage(TextureAtlas atlas);
+	void createTextureImage(unsigned char* data, VkImage& image, VkDeviceMemory& imageMemory, VkImageView& imageView);
 	void draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint16_t currentFrame);
 	void updateUBO(VkDevice device, const World_UBO& uboData, uint32_t currentImage);
 
@@ -67,23 +82,34 @@ public:
 	
 	void cleanup();
 
-	float heightMultiplier = 50.0f;
+	uint32_t worldSpherePipeline;
+
+	WorldRenderState renderState;
+
+	float terrainHeight = 50.0f;
+	float terrainScale = 0.01f;
 
 	glm::ivec3 playerChunk = { 0,0,0 };
-	int renderDistance = 32;
+	int renderDistance = 8;
 
 private:
 	VkDevice device;
 	VkPhysicalDevice physicalDevice;
 	VkQueue queue;
 	VkCommandPool commandPool;
+	VkDescriptorSetLayout descriptorSetLayout;
 
 	FastNoiseLite heightMap;
 	TextureAtlas atlas;
 
-	VkImage textureAtlas{ VK_NULL_HANDLE };
-	VkDeviceMemory textureAtlasMemory{ VK_NULL_HANDLE };
-	VkImageView textureAtlasView{ VK_NULL_HANDLE };
+	VkImage C_TextureAtlas{ VK_NULL_HANDLE };
+	VkDeviceMemory C_TextureMemory{ VK_NULL_HANDLE };
+	VkImageView C_TextureAtlasView{ VK_NULL_HANDLE };
+
+	VkImage N_TextureAtlas{ VK_NULL_HANDLE };
+	VkDeviceMemory N_TextureMemory{ VK_NULL_HANDLE };
+	VkImageView N_TextureAtlasView{ VK_NULL_HANDLE };
+
 	VkSampler textureSampler{ VK_NULL_HANDLE };
 	VkDescriptorPool descriptorPool{ VK_NULL_HANDLE };
 
@@ -92,9 +118,9 @@ private:
 	std::vector<VkDeviceMemory> uniformBuffersMemory;
 	std::vector<void*> uniformBuffersMapped;
 	
-	void createDescriptorPool(VkDevice device, uint16_t MAX_FRAMES_IN_FLIGHT);
-	void createWorldDescriptorSet(VkDevice device, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT);
-	void createWorldUniformBuffer(VkDevice device, VkPhysicalDevice physicalDevice, uint16_t MAX_FRAMES_IN_FLIGHT);
+	void createDescriptorPool(uint16_t MAX_FRAMES_IN_FLIGHT);
+	void createWorldDescriptorSet(VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT);
+	void createWorldUniformBuffer(uint16_t MAX_FRAMES_IN_FLIGHT);
 
 	TextureAtlas buildTextureAtlas(std::vector<BlockData>& inputBlocks, int tileSize);
 

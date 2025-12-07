@@ -4,16 +4,18 @@
 #include <GLFW/glfw3.h>
 #include <imgui.h>
 
-class GuiLayer
-{
+#include "entityHandlers/renderer/VulkanContext.h"
+
+class GuiLayer {
 public:
-	void init(VkInstance instance, VkDevice device, VkPhysicalDevice physicalDevice, uint32_t queueFamily, VkQueue queue , VkRenderPass renderPass, size_t imageCount, GLFWwindow* window);
+	void init(ContextHandle handle, uint32_t queueFamily, size_t imageCount, GLFWwindow* window);
 
 	void beginFrame();
 	void endFrame(VkCommandBuffer commandBuffer);
 
-	void cleanup(VkDevice device);
+	~GuiLayer();
 
 private:
+	VkDevice device = VK_NULL_HANDLE;
 	VkDescriptorPool GuiDescriptorPool = VK_NULL_HANDLE;
 };

@@ -32,6 +32,7 @@ public:
 
 	//externals/state variable:
 	bool inTransformationState;
+
 	Camera* camera = nullptr;
 	int screenWidth;
 	int screenHeight;

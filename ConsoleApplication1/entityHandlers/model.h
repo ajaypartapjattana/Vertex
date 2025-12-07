@@ -46,8 +46,9 @@ public:
 
 	bool isSelected = 0;
 
-	std::string obj_path;
-	std::string texture_path;
+	std::string obj_Path;
+	std::string Cmap_Path;
+	std::string Nmap_Path;
 
 	json toJson() const;
 	void fromJson(const json& j);

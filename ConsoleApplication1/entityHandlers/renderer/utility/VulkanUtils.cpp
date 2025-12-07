@@ -219,11 +219,11 @@ VkImageView VulkanUtils::createImageView(VkDevice device, VkImage image, VkForma
     return imageView;
 }
 
-void VulkanUtils::createTextureSampler(VkDevice device, VkPhysicalDevice physicalDevice, VkSampler& textureSampler) {
+void VulkanUtils::createTextureSampler(VkDevice device, VkPhysicalDevice physicalDevice, VkSampler& textureSampler, VkFilter filtering) {
     VkSamplerCreateInfo samplerInfo{};
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    samplerInfo.magFilter = VK_FILTER_NEAREST;
-    samplerInfo.minFilter = VK_FILTER_NEAREST;
+    samplerInfo.magFilter = filtering;
+    samplerInfo.minFilter = filtering;
 
     samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;

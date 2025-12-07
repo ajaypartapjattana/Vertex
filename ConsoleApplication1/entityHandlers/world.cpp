@@ -14,39 +14,55 @@
 #include "renderer/utility/stb_image_write.h"
 #pragma warning(pop)
 
-World::World(VkDevice device, VkPhysicalDevice physicalDevice, VkQueue queue, VkCommandPool commandPool, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT)
-	: chunkBuilderActive(true), ChunkGenerator(&World::chunkBuilderLoop, this), ChunkMesher(&World::chunkMesherLoop, this), device(device), physicalDevice(physicalDevice), queue(queue), commandPool(commandPool) {
+World::World(const ContextHandle& handle) : 
+	device(handle.device),
+	physicalDevice(handle.physicalDevice),
+	descriptorSetLayout(handle.descriptorSetLayout),
+	queue(handle.graphicsQueue),
+	commandPool(handle.commandPool),
+	chunkBuilderActive(true),
+	ChunkGenerator(&World::chunkBuilderLoop, this),
+	ChunkMesher(&World::chunkMesherLoop, this)
+{
 	heightMap.SetNoiseType(FastNoiseLite::NoiseType_Perlin);
-	heightMap.SetFrequency(0.01f);
+	heightMap.SetFrequency(terrainScale);
 
-	createDescriptorPool(device, FRAMES_IN_FLIGHT);
+	createDescriptorPool(handle.MAX_FRAMES_IN_FLIGHT);
 
 	BlockData grass{};
 	grass.name = "grass";
+	grass.ColorMap = "block_textures/grass_256.png";
+	grass.NormalMap = "block_textures/grass_256_Normal.png";
 	grass.index = 2;
-	grass.filePath = "block_textures/grass_256.png";
 
 	BlockData stone{};
 	stone.name = "stone";
+	stone.ColorMap = "block_textures/stone_256.png";
+	stone.NormalMap = "block_textures/stone_256_Normal.png";
 	stone.index = 1;
-	stone.filePath = "block_textures/stone_256.png";
 
 	BlockData dirt{};
 	dirt.name = "dirt";
+	dirt.ColorMap = "block_textures/dirt_256.png";
+	dirt.NormalMap = "block_textures/dirt_256_Normal.png";
 	dirt.index = 3;
-	dirt.filePath = "block_textures/dirt_256.png";
 
 	BlockData netherack{};
 	netherack.name = "netherack";
+	netherack.ColorMap = "block_textures/netherack_256.png";
+	netherack.NormalMap = "block_textures/netherack_256_Normal.png";
 	netherack.index = 4;
-	netherack.filePath = "block_textures/netherack_256.png";
 
 	std::vector<BlockData> inBlocks = { grass , stone, dirt, netherack };
 	atlas = buildTextureAtlas(inBlocks, 256);
 
-	createTextureImage(atlas);
-	createWorldUniformBuffer(device, physicalDevice, FRAMES_IN_FLIGHT);
-	createWorldDescriptorSet(device, descriptorSetLayout, FRAMES_IN_FLIGHT);
+	createTextureImage(atlas.ColorData.data(), C_TextureAtlas, C_TextureMemory, C_TextureAtlasView);
+	createTextureImage(atlas.NormalData.data(), N_TextureAtlas, N_TextureMemory, N_TextureAtlasView);
+
+	VulkanUtils::createTextureSampler(device, physicalDevice, textureSampler, VK_FILTER_NEAREST);
+
+	createWorldUniformBuffer(handle.MAX_FRAMES_IN_FLIGHT);
+	createWorldDescriptorSet(descriptorSetLayout, handle.MAX_FRAMES_IN_FLIGHT);
 }
 
 World::~World() {
@@ -79,7 +95,7 @@ std::unique_ptr<Chunk> World::generateChunk(const glm::ivec3& pos) {
 			for (int y = 0; y < CHUNK_HEIGHT; y++) {
 				if (y < terrainHeight - 3) chunk->voxels[x][y][z] = 1;
 				else if (y < terrainHeight) chunk->voxels[x][y][z] = 3;
-				else if (y == terrainHeight) chunk->voxels[x][y][z] = 1;
+				else if (y == terrainHeight) chunk->voxels[x][y][z] = 2;
 				else chunk->voxels[x][y][z] = 0;
 			}
 		}
@@ -93,8 +109,7 @@ std::unique_ptr<Chunk> World::generateChunk(const glm::ivec3& pos) {
 	return chunk;
 }
 
-void World::Mesher(const Chunk& chunk, std::vector<Vertex>& verts, std::vector<uint32_t>& indices)
-{
+void World::Mesher(const Chunk& chunk, std::vector<Vertex>& verts, std::vector<uint32_t>& indices) {
 	glm::ivec3 pos = chunk.chunkPos;
 	//std::cout << "Meshing chunk: [" << pos.x << "," << pos.z << "]" << std::endl;
 
@@ -108,6 +123,15 @@ void World::Mesher(const Chunk& chunk, std::vector<Vertex>& verts, std::vector<u
 		{ 0,-1, 0 },
 		{ 0, 0, 1 },
 		{ 0, 0,-1 }
+	};
+
+	const glm::vec4 faceTangents[6] = {
+		{ 0, 0, 1,  1 },
+		{ 0, 0, 1, -1 },
+		{ 1, 0, 0,  1 },
+		{ 1, 0, 0, -1 },
+		{ 1, 0, 0,  1 },
+		{ 1, 0, 0, -1 }
 	};
 
 	const glm::vec3 faceVertices[6][4] = {
@@ -175,6 +199,7 @@ void World::Mesher(const Chunk& chunk, std::vector<Vertex>& verts, std::vector<u
 						vert.normal = glm::vec3(n);
 						vert.color = {1.0f,1.0f,1.0f};
 						vert.texCoord = uvFace[v];
+						vert.tangent = faceTangents[f];
 						verts.push_back(vert);
 					}
 					indices.push_back(baseIndex + 0);
@@ -202,8 +227,8 @@ void World::GreedyMesher(const Chunk& chunk, std::vector<Vertex>& verts, std::ve
 		{
 			if (wy < 0 || wy >= CHUNK_SIZE) return false;
 
-			int cx = floor(wx / float(CHUNK_SIZE));
-			int cz = floor(wz / float(CHUNK_SIZE));
+			int cx = (int)floor(wx / float(CHUNK_SIZE));
+			int cz = (int)floor(wz / float(CHUNK_SIZE));
 
 			glm::ivec3 p(cx, 0, cz);
 			auto it = chunks.find(p);
@@ -348,7 +373,7 @@ void World::GreedyMesher(const Chunk& chunk, std::vector<Vertex>& verts, std::ve
 						basePos + glm::vec3(v) * (float)h
 					};
 
-					uint32_t bi = verts.size();
+					uint32_t bi = static_cast<uint32_t>(verts.size());
 
 					glm::vec2 uvFace[4] = {
 						{uv.x, uv.y},
@@ -415,17 +440,7 @@ void World::uploadChunkToGPU(Chunk& chunk) {
 	VulkanUtils::createBuffer(physicalDevice, device, indexSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, chunk.indexBuffer, chunk.indexMemory);
 	VulkanUtils::copyBuffer(commandPool, device, stagingVertexBuffer, chunk.vertexBuffer, vertexSize, queue);
 	VulkanUtils::copyBuffer(commandPool, device, stagingIndexBuffer, chunk.indexBuffer, indexSize, queue);
-
-	if (World::vkSetDebugUtilsObjectNameEXT) {
-		VkDebugUtilsObjectNameInfoEXT nameInfo{};
-		nameInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
-		nameInfo.objectType = VK_OBJECT_TYPE_BUFFER;
-		nameInfo.objectHandle = (uint64_t)chunk.vertexBuffer;
-		nameInfo.pObjectName = "chunkVertexBuffer";
-		vkSetDebugUtilsObjectNameEXT(device, &nameInfo);
-	}
 		
-
 	vkDestroyBuffer(device, stagingVertexBuffer, nullptr);
 	vkDestroyBuffer(device, stagingIndexBuffer, nullptr);
 	vkFreeMemory(device, stagingVertexmemory, nullptr);
@@ -453,8 +468,23 @@ TextureAtlas World::buildTextureAtlas(std::vector<BlockData>& inputBlocks, int t
 
 	result.atlasWidth = result.atlasHeight = atlasSizePx;
 
-	result.pixels.resize(atlasSizePx * atlasSizePx * 4);
-	std::fill(result.pixels.begin(), result.pixels.end(), 0);
+	result.ColorData.resize(atlasSizePx * atlasSizePx * 4);
+	std::fill(result.ColorData.begin(), result.ColorData.end(), 0);
+	result.NormalData.resize(atlasSizePx * atlasSizePx * 4);
+	std::fill(result.NormalData.begin(), result.NormalData.end(), 0);
+
+	auto fillData = [&](std::vector<unsigned char>& dst, unsigned char* src, int dstX, int dstY) -> void {
+		for (int yy = 0; yy < tileSize; yy++) {
+			for (int xx = 0; xx < tileSize; xx++) {
+				int srcIndex = (yy * tileSize + xx) * 4;
+				int dstIndex = ((dstY + yy) * atlasSizePx + (dstX + xx)) * 4;
+				dst[dstIndex + 0] = src[srcIndex + 0];
+				dst[dstIndex + 1] = src[srcIndex + 1];
+				dst[dstIndex + 2] = src[srcIndex + 2];
+				dst[dstIndex + 3] = src[srcIndex + 3];
+			}
+		}
+	};
 
 	int index = 0;
 	for (auto& block : inputBlocks) {
@@ -467,30 +497,23 @@ TextureAtlas World::buildTextureAtlas(std::vector<BlockData>& inputBlocks, int t
 		int dstY = yTile * tileSize;
 
 		int w, h, comp;
-		unsigned char* data = stbi_load(block.filePath.c_str(), &w, &h, &comp, 4);
+		unsigned char* ColorData = stbi_load(block.ColorMap.c_str(), &w, &h, &comp, 4);
+		unsigned char* NormalData = stbi_load(block.NormalMap.c_str(), &w, &h, &comp, 4);
 
-		if (!data) {
-			std::cerr << "failed to load block: " << block.filePath << "\n";
+		if (!ColorData || !NormalData) {
+			std::cerr << "texture data missing block: " << block.ColorMap << "\n";
 			continue;
 		}
 		if (w != tileSize || h != tileSize) {
-			std::cerr << "Warning: " << block.filePath << " not " << tileSize << "x" << tileSize << "\n";
+			std::cerr << "Warning: " << block.ColorMap << " not " << tileSize << "x" << tileSize << "\n";
 		}
 
-		for (int yy = 0; yy < tileSize; yy++) {
-			for (int xx = 0; xx < tileSize; xx++) {
-				int srcIndex = (yy * tileSize + xx) * 4;
-				int dstIndex = ((dstY + yy) * atlasSizePx + (dstX + xx)) * 4;
-				result.pixels[dstIndex + 0] = data[srcIndex + 0];
-				result.pixels[dstIndex + 1] = data[srcIndex + 1];
-				result.pixels[dstIndex + 2] = data[srcIndex + 2];
-				result.pixels[dstIndex + 3] = data[srcIndex + 3];
-			}
-		}
+		fillData(result.ColorData, ColorData, dstX, dstY);
+		fillData(result.NormalData, NormalData, dstX, dstY);
 
-		stbi_write_png("atlas.png", result.atlasWidth, result.atlasHeight, 4, result.pixels.data(), result.atlasWidth * 4);
+		stbi_image_free(ColorData);
+		stbi_image_free(NormalData);
 
-		stbi_image_free(data);
 		float px = (float)atlasSizePx;
 		float inset = 0.5f / px;
 
@@ -504,14 +527,16 @@ TextureAtlas World::buildTextureAtlas(std::vector<BlockData>& inputBlocks, int t
 
 		std::cout << block.name << "[" << block.index << "]" << "uvMin: " << u0 << "," << v0 << "; uvMax: " << u1 << v1 << std::endl;
 	}
+	stbi_write_png("atlas_Color.png", result.atlasWidth, result.atlasHeight, 4, result.ColorData.data(), result.atlasWidth * 4);
+	stbi_write_png("atlas_Normal.png", result.atlasWidth, result.atlasHeight, 4, result.NormalData.data(), result.atlasWidth * 4);
+
 	return result;
 }
 
-void World::createTextureImage(TextureAtlas atlas) {
-	unsigned char* pixels = atlas.pixels.data();
+void World::createTextureImage(unsigned char* imageData, VkImage& image, VkDeviceMemory& imageMemory, VkImageView& imageView) {
 	VkDeviceSize imageSize = atlas.atlasWidth * atlas.atlasHeight * 4;
 
-	if (!pixels) {
+	if (!imageData) {
 		throw std::runtime_error("failed to load texture image!");
 	}
 
@@ -521,19 +546,18 @@ void World::createTextureImage(TextureAtlas atlas) {
 
 	void* data;
 	vkMapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data);
-	memcpy(data, pixels, static_cast<size_t>(imageSize));
+	memcpy(data, imageData, static_cast<size_t>(imageSize));
 	vkUnmapMemory(device, stagingBufferMemory);
 
-	VulkanUtils::createImage(device, physicalDevice, atlas.atlasWidth, atlas.atlasHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureAtlas, textureAtlasMemory);
-	VulkanUtils::transitionImageLayout(commandPool, device, queue, textureAtlas, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-	VulkanUtils::copyBufferToImage(device, queue, commandPool, stagingBuffer, textureAtlas, static_cast<uint32_t>(atlas.atlasWidth), static_cast<uint32_t>(atlas.atlasHeight));
-	VulkanUtils::transitionImageLayout(commandPool, device, queue, textureAtlas, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	VulkanUtils::createImage(device, physicalDevice, atlas.atlasWidth, atlas.atlasHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, image, imageMemory);
+	VulkanUtils::transitionImageLayout(commandPool, device, queue, image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+	VulkanUtils::copyBufferToImage(device, queue, commandPool, stagingBuffer, image, static_cast<uint32_t>(atlas.atlasWidth), static_cast<uint32_t>(atlas.atlasHeight));
+	VulkanUtils::transitionImageLayout(commandPool, device, queue, image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 	vkDestroyBuffer(device, stagingBuffer, nullptr);
 	vkFreeMemory(device, stagingBufferMemory, nullptr);
 
-	textureAtlasView = VulkanUtils::createImageView(device, textureAtlas, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
-	VulkanUtils::createTextureSampler(device, physicalDevice, textureSampler);
+	imageView = VulkanUtils::createImageView(device, image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
 }
 
 void World::updateUBO(VkDevice device, const World_UBO& uboData, uint32_t currentImage) {
@@ -541,6 +565,7 @@ void World::updateUBO(VkDevice device, const World_UBO& uboData, uint32_t curren
 }
 
 void World::draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint16_t currentFrame) {
+	if (chunks.empty()) return;
 	for (auto& [pos, chunkPtr] : chunks) {
 		Chunk& chunk = *chunkPtr;
 		if (chunk.dirty) uploadChunkToGPU(chunk);
@@ -609,14 +634,24 @@ void World::cleanup() {
 		vkDestroySampler(device, textureSampler, nullptr);
 		textureSampler = VK_NULL_HANDLE;
 	}
-	if (textureAtlasView != VK_NULL_HANDLE) {
-		vkDestroyImageView(device, textureAtlasView, nullptr);
-		textureAtlasView = VK_NULL_HANDLE;
+	if (C_TextureAtlasView != VK_NULL_HANDLE) {
+		vkDestroyImageView(device, C_TextureAtlasView, nullptr);
+		C_TextureAtlasView = VK_NULL_HANDLE;
 	}
-	if (textureAtlas != VK_NULL_HANDLE) {
-		vkDestroyImage(device, textureAtlas, nullptr);
-		vkFreeMemory(device, textureAtlasMemory, nullptr);
-		textureAtlasMemory = VK_NULL_HANDLE;
+	if (C_TextureAtlas != VK_NULL_HANDLE) {
+		vkDestroyImage(device, C_TextureAtlas, nullptr);
+		vkFreeMemory(device, C_TextureMemory, nullptr);
+		C_TextureMemory = VK_NULL_HANDLE;
+	}
+
+	if (N_TextureAtlasView != VK_NULL_HANDLE) {
+		vkDestroyImageView(device, N_TextureAtlasView, nullptr);
+		N_TextureAtlasView = VK_NULL_HANDLE;
+	}
+	if (N_TextureAtlas != VK_NULL_HANDLE) {
+		vkDestroyImage(device, N_TextureAtlas, nullptr);
+		vkFreeMemory(device, N_TextureMemory, nullptr);
+		N_TextureMemory = VK_NULL_HANDLE;
 	}
 }
 
@@ -625,6 +660,7 @@ void World::createChunkBuffers(Chunk& chunk) {
 }
 
 void World::destroyChunkBuffers(Chunk& chunk) {
+	vkDeviceWaitIdle(device);
 	if (chunk.vertexBuffer) vkDestroyBuffer(device, chunk.vertexBuffer, nullptr);
 	if (chunk.indexBuffer) vkDestroyBuffer(device, chunk.indexBuffer, nullptr);
 	if (chunk.vertexMemory) vkFreeMemory(device, chunk.vertexMemory, nullptr);
@@ -636,13 +672,16 @@ void World::destroyChunkBuffers(Chunk& chunk) {
 	chunk.gpuAllocated = false;
 }
 
-void World::createDescriptorPool(VkDevice device, uint16_t MAX_FRAMES_IN_FLIGHT) {
-	std::array<VkDescriptorPoolSize, 2> poolSizes;
+void World::createDescriptorPool(uint16_t MAX_FRAMES_IN_FLIGHT) {
+	std::array<VkDescriptorPoolSize, 3> poolSizes;
 	poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 	poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
 	poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 	poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+
+	poolSizes[2].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	poolSizes[2].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
 	VkDescriptorPoolCreateInfo poolInfo{};
 	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -655,7 +694,7 @@ void World::createDescriptorPool(VkDevice device, uint16_t MAX_FRAMES_IN_FLIGHT)
 	}
 }
 
-void World::createWorldDescriptorSet(VkDevice device, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT) {
+void World::createWorldDescriptorSet(VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT) {
 	std::vector<VkDescriptorSetLayout> layouts(FRAMES_IN_FLIGHT, descriptorSetLayout);
 
 	VkDescriptorSetAllocateInfo allocInfo{};
@@ -675,12 +714,17 @@ void World::createWorldDescriptorSet(VkDevice device, VkDescriptorSetLayout desc
 		bufferInfo.offset = 0;
 		bufferInfo.range = sizeof(World_UBO);
 
-		VkDescriptorImageInfo imageInfo{};
-		imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		imageInfo.imageView = textureAtlasView;
-		imageInfo.sampler = textureSampler;
+		VkDescriptorImageInfo ColorMapInfo{};
+		ColorMapInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		ColorMapInfo.imageView = C_TextureAtlasView;
+		ColorMapInfo.sampler = textureSampler;
 
-		std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+		VkDescriptorImageInfo NormalMapInfo{};
+		NormalMapInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		NormalMapInfo.imageView = N_TextureAtlasView;
+		NormalMapInfo.sampler = textureSampler;
+
+		std::array<VkWriteDescriptorSet, 3> descriptorWrites{};
 		descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		descriptorWrites[0].dstSet = descriptorSets[i];
 		descriptorWrites[0].dstBinding = 0;
@@ -697,13 +741,21 @@ void World::createWorldDescriptorSet(VkDevice device, VkDescriptorSetLayout desc
 		descriptorWrites[1].dstArrayElement = 0;
 		descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		descriptorWrites[1].descriptorCount = 1;
-		descriptorWrites[1].pImageInfo = &imageInfo;
+		descriptorWrites[1].pImageInfo = &ColorMapInfo;
+
+		descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descriptorWrites[2].dstSet = descriptorSets[i];
+		descriptorWrites[2].dstBinding = 2;
+		descriptorWrites[2].dstArrayElement = 0;
+		descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		descriptorWrites[2].descriptorCount = 1;
+		descriptorWrites[2].pImageInfo = &NormalMapInfo;
 
 		vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 	}
 }
 
-void World::createWorldUniformBuffer(VkDevice device, VkPhysicalDevice physicalDevice, uint16_t MAX_FRAMES_IN_FLIGHT) {
+void World::createWorldUniformBuffer(uint16_t MAX_FRAMES_IN_FLIGHT) {
 	VkDeviceSize bufferSize = sizeof(World_UBO);
 
 	uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
@@ -719,7 +771,7 @@ void World::createWorldUniformBuffer(VkDevice device, VkPhysicalDevice physicalD
 int World::getTerrainHeight(int x, int z) {
 	float n = heightMap.GetNoise((float)x, (float)z);
 	n = (n + 1.0f) * 0.5f;
-	return (int)(n * heightMultiplier);
+	return (int)(n * terrainHeight);
 }
 
 void World::chunkBuilderLoop() {
@@ -808,6 +860,15 @@ void World::reqProximityChunks(const glm::vec3& pos) {
 			//std::cout << "requested chunk : [" << proxChunk.x << "," << proxChunk.z << "]" << std::endl;
 		}
 	}
+}
+
+void World::updateTerrainConstants() {
+	heightMap.SetFrequency(terrainScale);
+}
+
+void World::clearLoadedChunks() {
+	for (auto& [pos, chunkPtr] : chunks) destroyChunkBuffers(*chunkPtr);
+	chunks.clear();
 }
 
 void World::requestChunk(const glm::ivec3& pos) {

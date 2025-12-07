@@ -13,37 +13,46 @@
 #include "model.h"
 #include "commProtocols/threadCommProtocol.h"
 
+#include "renderer/VulkanContext.h"
+
 class ModelManager {
 public:
-	ModelManager() : running(true), loaderThread(&ModelManager::loaderLoop, this){}
-	~ModelManager() {
-		running = false;
-		if (loaderThread.joinable()) loaderThread.join();
-	}
+	ModelManager(ContextHandle handle);
+	~ModelManager();
 
 	//runtime-loading:
 	void requestLoad(const std::string& objPath, const std::string& texPath) {
 		loadRequests.push({ objPath, texPath });
 	}
-	void update(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT);
+	void update();
 	std::unique_ptr<Model> loadModelData(const std::string& obj_path, const std::string& texture_path);
-	void createLoadedModel(Model& model, VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT);
+	void uploadModelToGPU(Model& model);
 
 	//static-loading:
 	void gatherModelData(const std::string& obj_path, const std::string& texture_path);
-	void updateLoadedModels(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT);
+	void pushModelsToGPU();
 
 	void drawAll(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint16_t currentFrame);
-	void cleanUp(VkDevice device);
-	void destroyModel(Model* model, VkDevice device);
+	void cleanUp();
+	void destroyModel(Model* model);
 	Model* getModel(size_t index);
 	std::vector<std::unique_ptr<Model>>& getModelList();
+
+	//model_config:
 	void saveModelMeta();
 	void loadModelMeta();
 
 	std::unordered_set<Model*> selectedModels;
 
 private:
+	VkDevice device;
+	VkPhysicalDevice physicalDevice;
+	VkQueue queue;
+	VkCommandPool commandPool;
+
+	VkDescriptorSetLayout descriptorSetLayout;
+	uint16_t FRAMES_IN_FLIGHT;
+
 	std::vector<std::unique_ptr<Model>> models;
 
 	struct LoadRequest {
