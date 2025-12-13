@@ -36,6 +36,7 @@ void GuiLayer::init(ContextHandle handle, uint32_t queueFamily, size_t imageCoun
 	initInfo.MinImageCount = static_cast<uint32_t>(imageCount);
 	initInfo.ImageCount = static_cast<uint32_t>(imageCount);
 	initInfo.RenderPass = handle.renderPass;
+	initInfo.MSAASamples = VK_SAMPLE_COUNT_4_BIT;
 
 	ImGui_ImplVulkan_Init(&initInfo);
 }

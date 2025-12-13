@@ -141,6 +141,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Controllers\Camera.cpp" />
+    <ClCompile Include="Controllers\SensorListner.cpp" />
     <ClCompile Include="Controllers\transformController.cpp" />
     <ClCompile Include="Controllers\Utilities\vecMath.cpp" />
     <ClCompile Include="entityHandlers\renderer\materials.cpp" />
@@ -156,16 +157,16 @@
     <ClCompile Include="Controllers\Input.cpp" />
     <ClCompile Include="entityHandlers\model.cpp" />
     <ClCompile Include="entityHandlers\ModelManager.cpp" />
-    <ClCompile Include="entityHandlers\renderer\utility\VulkanUtils.cpp" />
+    <ClCompile Include="entityHandlers\renderer\VulkanUtils.cpp" />
     <ClCompile Include="entityHandlers\renderer\pipelines.cpp" />
     <ClCompile Include="entityHandlers\renderer\VulkanContext.cpp" />
     <ClCompile Include="windowSurface.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Controllers\Camera.h" />
+    <ClInclude Include="Controllers\SensorListner.h" />
     <ClInclude Include="entityHandlers\renderer\materials.h" />
     <ClInclude Include="entityHandlers\renderer\VulkanContext.h" />
-    <ClInclude Include="player.h" />
     <ClInclude Include="Controllers\transformController.h" />
     <ClInclude Include="Controllers\Utilities\vecMath.h" />
     <ClInclude Include="entityHandlers\FastNoiseLite.h" />
@@ -178,7 +179,7 @@
     <ClInclude Include="entityHandlers\ModelManager.h" />
     <ClInclude Include="entityHandlers\commProtocols\threadCommProtocol.h" />
     <ClInclude Include="entityHandlers\renderer\utility\Vertex.h" />
-    <ClInclude Include="entityHandlers\renderer\utility\VulkanUtils.h" />
+    <ClInclude Include="entityHandlers\renderer\VulkanUtils.h" />
     <ClInclude Include="entityHandlers\renderer\pipelines.h" />
     <ClInclude Include="windowSurface.h" />
   </ItemGroup>

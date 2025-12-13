@@ -1,4 +1,10 @@
+#define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
+
+#include <WinSock2.h>
+#include <WS2tcpip.h>
+#include <windows.h>
+
 #define VK_USE_PLATFORM_WIN32_KHR
 #define GLFW_INCLUDE_VULKAN
 #define GLFW_EXPOSE_NATIVE_WIN32
@@ -18,19 +24,22 @@
 #include "entityHandlers/renderer/VulkanContext.h"
 
 #include "GuiLayer.h"
+
 #include "Controllers/Camera.h"
 #include "Controllers/transformController.h"
+#include "Controllers/SensorListner.h"
+
 #include "entityHandlers/renderer/pipelines.h"
 #include "entityHandlers/ModelManager.h"
 #include "entityHandlers/world.h"
 #include "entityHandlers/renderer/utility/Vertex.h"
-#include "entityHandlers/renderer/utility/VulkanUtils.h"
+#include "entityHandlers/renderer/VulkanUtils.h"
 
 const uint32_t WIDTH = 1200;
 const uint32_t HEIGHT = 800;
 
 enum DrawMode {
-    objectMode, wireframeMode, pointMode
+    objectMode, wireframeMode, pointMode, curvyWorld
 };
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
@@ -43,6 +52,7 @@ VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMes
 }
 
 struct RenderState {
+    VkSampleCountFlagBits MSAASampleCount = VK_SAMPLE_COUNT_1_BIT;
     bool enableTextures;
     glm::vec3 lightDir;
     glm::vec3 lightColor;
@@ -67,7 +77,11 @@ public:
 
         Input::init(window.handle);
         gui.init(appHandles, familyIndices.graphicsFamily.value(), appContext.swapChainImages.size(), window.handle);
+
+        transformController.setCamera(&camera);
+        transformController.setScreenDimensions(glm::ivec2(appContext.swapChainExtent.width, appContext.swapChainExtent.height));
     }
+    ~Vortx(){}
 
     void run() {
         init();
@@ -86,10 +100,12 @@ private:
     PipelineManager pipelineManager{ appHandles.device };
     ModelManager modelManager{ appHandles };
     World world{ appHandles };
-    Camera camera{ glm::vec3(0.0f, 100.0f, 0.0f), (float)appContext.swapChainExtent.width / appContext.swapChainExtent.width };
+    Camera camera{ glm::vec3(0.0f, 60.0f, 0.0f), (float)appContext.swapChainExtent.width / appContext.swapChainExtent.width };
     TransformController transformController;
 
     GuiLayer gui;
+
+    SensorReceiver sensor;
 
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
     
@@ -103,7 +119,7 @@ private:
 
     DrawMode drawMode = DrawMode::objectMode;
 
-    RenderState sceneRenderState{ false, glm::vec3(0.5f, 0.5f, 2.0f), glm::vec3(1.0f, 1.0f, 1.0f), false };
+    RenderState sceneRenderState{ VK_SAMPLE_COUNT_4_BIT, false, glm::vec3(0.5f, 0.5f, 2.0f), glm::vec3(1.0f, 1.0f, 1.0f), false };
 
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
         auto app = reinterpret_cast<Vortx*>(glfwGetWindowUserPointer(window));
@@ -134,7 +150,21 @@ private:
 
     void init() {
         generateRenderMethods();
-        initTransformController();
+        sensor.start();
+    }
+
+    void mainloop() {
+        while (!glfwWindowShouldClose(window.handle)) {
+            glfwPollEvents();
+            modelManager.update();
+            handleInputs();
+            buildUI();
+            drawFrame();
+            world.captureGenratedChunks();
+            listenSensor();
+        }
+        vkDeviceWaitIdle(appHandles.device);
+
     }
 
     void dinit() {
@@ -144,20 +174,14 @@ private:
         vkDestroyPipelineLayout(appHandles.device, pipelineLayout, nullptr);
     }
 
-    void initTransformController() {
-        transformController.setCamera(&camera);
-    }
-    void mainloop() {
-        while (!glfwWindowShouldClose(window.handle)) {
-            glfwPollEvents();
-            modelManager.update();
-            handleInputs();
-            buildUI();
-            drawFrame();
-            world.captureGenratedChunks();
-        }
-        vkDeviceWaitIdle(appHandles.device);
+    void listenSensor() {
+        float ax, ay, az;
+        float gx, gy, gz;
 
+        sensor.getAccel(ax, ay, az);
+        sensor.getGyro(gx, gy, gz);
+
+        camera.accelGyroInpCHEAP(ax, ay, az, gx, gy, gz);
     }
 
     void generateRenderMethods() {
@@ -189,6 +213,7 @@ private:
         pipeFill_Desc.pipelineLayout = pipelineLayout;
         pipeFill_Desc.vertexInput = vertexInput;
         pipeFill_Desc.cullMode = VK_CULL_MODE_NONE;
+        pipeFill_Desc.rasterSamples = sceneRenderState.MSAASampleCount;
 
         PipelineDescription pipeEdge_Desc{};
         pipeEdge_Desc.vertShaderPath = "shaders/basic.vert.spv";
@@ -198,6 +223,7 @@ private:
         pipeEdge_Desc.vertexInput = vertexInput;
         pipeEdge_Desc.polygonMode = VK_POLYGON_MODE_LINE;
         pipeEdge_Desc.cullMode = VK_CULL_MODE_NONE;
+        pipeEdge_Desc.rasterSamples = sceneRenderState.MSAASampleCount;
 
         PipelineDescription pipePoint_Desc{};
         pipePoint_Desc.vertShaderPath = "shaders/basic.vert.spv";
@@ -207,6 +233,7 @@ private:
         pipePoint_Desc.vertexInput = vertexInput;
         pipePoint_Desc.polygonMode = VK_POLYGON_MODE_POINT;
         pipePoint_Desc.cullMode = VK_CULL_MODE_NONE;
+        pipePoint_Desc.rasterSamples = sceneRenderState.MSAASampleCount;
 
         PipelineDescription pipeWorldShpere_Desc{};
         pipeWorldShpere_Desc.vertShaderPath = "shaders/parabolic.vert.spv";
@@ -215,6 +242,7 @@ private:
         pipeWorldShpere_Desc.pipelineLayout = pipelineLayout;
         pipeWorldShpere_Desc.vertexInput = vertexInput;
         pipeWorldShpere_Desc.cullMode = VK_CULL_MODE_NONE;
+        pipeWorldShpere_Desc.rasterSamples = sceneRenderState.MSAASampleCount;
 
         renderFill_Pipeline =  pipelineManager.createPipleine(pipeFill_Desc);
         renderEdge_Pipeline = pipelineManager.createPipleine(pipeEdge_Desc);
@@ -239,9 +267,10 @@ private:
         renderPassInfo.renderArea.offset = { 0,0 };
         renderPassInfo.renderArea.extent = appContext.swapChainExtent;
 
-        std::array<VkClearValue, 2> clearValues{};
+        std::array<VkClearValue, 3> clearValues{};
         clearValues[0].color = { { 0.0f, 0.0f, 0.0f, 1.0f } };
-        clearValues[1].depthStencil = { 1.0f, 0 };
+        clearValues[1].color = { { 0.0f, 0.0f, 0.0f, 1.0f} };
+        clearValues[2].depthStencil = { 1.0f, 0 };
 
         renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
         renderPassInfo.pClearValues = clearValues.data();
@@ -272,11 +301,12 @@ private:
         case pointMode:
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineManager.get(renderPoint_Pipeline).pipeline);
             break;
+        case curvyWorld:
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineManager.get(world.worldSpherePipeline).pipeline);;
+            break;
         default:
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineManager.get(renderFill_Pipeline).pipeline);
         }
-
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineManager.get(world.worldSpherePipeline).pipeline);
 
         PushConstants pc{};
         pc.useTexture = (sceneRenderState.enableTextures) ? 1 : 0;
@@ -296,16 +326,18 @@ private:
     void drawFrame() {
         vkWaitForFences(appHandles.device, 1, &appContext.inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 
-        while (appContext.swapChainExtent.width == 0 || appContext.swapChainExtent.height == 0) {
+        if (appContext.swapChainExtent.width == 0 || appContext.swapChainExtent.height == 0) {
             glfwWaitEvents();
+            return;
         }
 
         uint32_t imageIndex;
         VkResult result =  vkAcquireNextImageKHR(appHandles.device, appContext.swapChain, UINT64_MAX, appContext.imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
 
-        if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
             std::cout << "window recreated" << std::endl;
             appContext.recreateSwapChain();
+            transformController.setScreenDimensions(glm::ivec2(appContext.swapChainExtent.width, appContext.swapChainExtent.height));
             camera.setAspectRatio(appContext.swapChainExtent.width / (float)appContext.swapChainExtent.height);
             return;
         }
@@ -336,7 +368,7 @@ private:
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &appContext.commandBuffers[currentFrame];
 
-        VkSemaphore signalSemaphores[] = { appContext.renderFinishedSemaphores[imageIndex] };
+        VkSemaphore signalSemaphores[] = { appContext.renderFinishedSemaphores[currentFrame] };
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores = signalSemaphores;
 
@@ -359,6 +391,8 @@ private:
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
             framebufferResized = false;
             appContext.recreateSwapChain();
+            transformController.setScreenDimensions(glm::ivec2(appContext.swapChainExtent.width, appContext.swapChainExtent.height));
+            camera.setAspectRatio(appContext.swapChainExtent.width / (float)appContext.swapChainExtent.height);
             return;
         }else if (result != VK_SUCCESS) {
             throw std::runtime_error("failed to acquire swap chain image!");
@@ -399,8 +433,8 @@ private:
 
         ubo.cameraPos = glm::vec4(camera.getPosition(), 0.0f);
 
-        ubo.sphereInfo.x = world.renderDistance * CHUNK_SIZE;
-        ubo.sphereInfo.y = world.renderDistance * CHUNK_SIZE;
+        ubo.sphereInfo.x = (float)world.renderDistance * CHUNK_SIZE;
+        ubo.sphereInfo.y = (float)world.renderDistance * CHUNK_SIZE;
         ubo.sphereInfo.z = world.renderState.worldCurvature / 100.0f;
         ubo.sphereInfo.w = world.renderState.radius;
 
@@ -461,21 +495,24 @@ private:
         const char* currentModeName = nullptr;
 
         switch (drawMode) {
-        case DrawMode::objectMode: 
+        case objectMode: 
             currentModeName = "Object mode";
             break;
-        case DrawMode::wireframeMode: 
+        case wireframeMode: 
             currentModeName = "Wireframe mode";
             break;
-        case DrawMode::pointMode:
+        case pointMode:
             currentModeName = "Point mode";
             break;
+        case curvyWorld:
+            currentModeName = "Curvy World";
         }
 
         if (ImGui::BeginCombo("Select Mode", currentModeName)) {
             if (ImGui::Selectable("Object mode", drawMode == DrawMode::objectMode)) drawMode = DrawMode::objectMode;
             if (ImGui::Selectable("Wireframe mode", drawMode == DrawMode::wireframeMode)) drawMode = DrawMode::wireframeMode;
             if (ImGui::Selectable("Point mode", drawMode == DrawMode::pointMode)) drawMode = DrawMode::pointMode;
+            if (ImGui::Selectable("Curvy World", drawMode == DrawMode::curvyWorld)) drawMode = DrawMode::curvyWorld;
             ImGui::EndCombo();
         }
 
@@ -490,13 +527,19 @@ private:
             world.updateTerrainConstants();
         }
 
+        ImGui::Text("IPv4: %s", sensor.localIPv4);
+        ImGui::Text("Port: %d", sensor.getPort());
+
         glm::vec3 pos = camera.getPosition();
         ImGui::Text("Pos: %.2f %.2f %.2f", pos.x, pos.y, pos.z);
+        glm::vec2 YawPitch = camera.getYawPitch();
+        ImGui::Text("Yaw: %.2f, Pitch: %.2f", YawPitch.x, YawPitch.y);
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
         ImGui::Text("Chunk Count: %d", world.getChunkCount());
 
-        ImGui::DragFloat("World curvature", &world.renderState.worldCurvature, 0.01f, -1.0f, 1.0f);
-        ImGui::DragFloat("World radius", &world.renderState.radius, 5.0f, 10.0f, 500.0f);
+        if (drawMode == DrawMode::curvyWorld) {
+            ImGui::DragFloat("World curvature", &world.renderState.worldCurvature, 0.01f, -1.0f, 1.0f);
+        }
 
         ImGui::Checkbox("Textures", &sceneRenderState.enableTextures);
         ImGui::Checkbox("saveData at termination", &sceneRenderState.saveModelData);

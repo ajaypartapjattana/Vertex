@@ -8,7 +8,7 @@
 
 #include "renderer/utility/Vertex.h"
 #include "renderer/utility/Chunk.h"
-#include "renderer/utility/VulkanUtils.h"
+#include "renderer/VulkanUtils.h"
 #include "commProtocols/threadCommProtocol.h"
 
 #include "renderer/VulkanContext.h"
@@ -73,7 +73,7 @@ public:
 
 	void updateChunkMesh(const glm::ivec3& pos);
 	void uploadChunkToGPU(Chunk& chunk);
-	void createTextureImage(unsigned char* data, VkImage& image, VkDeviceMemory& imageMemory, VkImageView& imageView);
+	void createTextureImage(unsigned char* data, ImageResources& image);
 	void draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint16_t currentFrame);
 	void updateUBO(VkDevice device, const World_UBO& uboData, uint32_t currentImage);
 
@@ -90,7 +90,7 @@ public:
 	float terrainScale = 0.01f;
 
 	glm::ivec3 playerChunk = { 0,0,0 };
-	int renderDistance = 8;
+	int renderDistance = 16;
 
 private:
 	VkDevice device;
@@ -102,13 +102,8 @@ private:
 	FastNoiseLite heightMap;
 	TextureAtlas atlas;
 
-	VkImage C_TextureAtlas{ VK_NULL_HANDLE };
-	VkDeviceMemory C_TextureMemory{ VK_NULL_HANDLE };
-	VkImageView C_TextureAtlasView{ VK_NULL_HANDLE };
-
-	VkImage N_TextureAtlas{ VK_NULL_HANDLE };
-	VkDeviceMemory N_TextureMemory{ VK_NULL_HANDLE };
-	VkImageView N_TextureAtlasView{ VK_NULL_HANDLE };
+	ImageResources colorTexture;
+	ImageResources NormalTexture;
 
 	VkSampler textureSampler{ VK_NULL_HANDLE };
 	VkDescriptorPool descriptorPool{ VK_NULL_HANDLE };

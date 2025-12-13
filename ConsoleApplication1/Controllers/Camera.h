@@ -20,14 +20,22 @@ public:
     void setPosition(const glm::vec3 pos);
     void makeCameraLookAt(const glm::vec3 pos);
     void setAspectRatio(float aspect);
+    
+    float gyroAccelSensitivity = 75.0f;
+    float gyFilterAlpha = 0.98f;
+    void accelGyroInp(float& ax, float& ay, float& az, float& gx, float& gy, float& gz);
+    void accelGyroInpCHEAP(float& ax, float& ay, float& az, float& gx, float& gy, float& gz);
 
     glm::mat4 getViewMatrix() const;
     glm::mat4 getProjectionMatrix() const;
 
     glm::vec3 getPosition() const { return position; }
+    glm::vec2 getYawPitch() const { return glm::vec2(yaw, pitch); }
     glm::vec3 getForward() const { return front; }
 
     float getCameraFov();
+
+    std::chrono::high_resolution_clock::time_point prevTime;
 
 private:
     glm::vec3 position;
@@ -40,7 +48,9 @@ private:
     glm::vec3 groundRight;
 
     float yaw;
+    float roll;
     float pitch;
+
     float fov;
     float aspect;
     float nearPlane;

@@ -9,6 +9,7 @@
 #include <json-develop/single_include/nlohmann/json.hpp>
 
 #include "renderer/utility/Vertex.h"
+#include "renderer/VulkanUtils.h"
 
 using json = nlohmann::json;
 
@@ -62,7 +63,10 @@ public:
 	void updateUBO(VkDevice device, const Model_UBO& uboData, uint32_t currentImage);
 	void createTexture(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, const std::string& texture_path);
 	void createDescriptorSet(VkDevice device, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT);
+
 	void draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint16_t currentFrame);
+	void setTransfrom(glm::mat4 tranform);
+
 	void cleanup(VkDevice device);
 
 private:
@@ -81,9 +85,7 @@ private:
 	std::vector<VkDeviceMemory> uniformBuffersMemory;
 	std::vector<void*> uniformBuffersMapped;
 
-	VkImage textureImage{ VK_NULL_HANDLE };
-	VkDeviceMemory textureImageMemory{ VK_NULL_HANDLE };
-	VkImageView textureImageView{ VK_NULL_HANDLE };
+	ImageResources texture;
 	VkSampler textureSampler{ VK_NULL_HANDLE };
 
 	std::vector<VkDescriptorSet> descriptorSets;

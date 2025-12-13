@@ -1,5 +1,4 @@
 #include "model.h"
-#include "renderer/utility/VulkanUtils.h"
 
 #include <stdexcept>
 
@@ -174,15 +173,16 @@ void Model::createTexture(VkDevice device, VkPhysicalDevice physicalDevice, VkCo
     vkUnmapMemory(device, stagingBufferMemory);
     stbi_image_free(pixels);
 
-    VulkanUtils::createImage(device, physicalDevice, texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage, textureImageMemory);
-    VulkanUtils::transitionImageLayout(commandPool, device, queue, textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    VulkanUtils::copyBufferToImage(device, queue, commandPool, stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
-    VulkanUtils::transitionImageLayout(commandPool, device, queue, textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    texture.format = VK_FORMAT_R8G8B8A8_SRGB;
+
+    VulkanUtils::createImageResources(device, physicalDevice, texWidth, texHeight, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, texture);
+    VulkanUtils::transitionImageLayout(commandPool, device, queue, texture.image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    VulkanUtils::copyBufferToImage(device, queue, commandPool, stagingBuffer, texture.image, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+    VulkanUtils::transitionImageLayout(commandPool, device, queue, texture.image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     vkDestroyBuffer(device, stagingBuffer, nullptr);
     vkFreeMemory(device, stagingBufferMemory, nullptr);
 
-    textureImageView = VulkanUtils::createImageView(device, textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
     VulkanUtils::createTextureSampler(device, physicalDevice, textureSampler, VK_FILTER_LINEAR);
 }
 
@@ -225,7 +225,7 @@ void Model::createDescriptorSet(VkDevice device, VkDescriptorSetLayout descripto
 
         VkDescriptorImageInfo imageInfo{};
         imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        imageInfo.imageView = textureImageView;
+        imageInfo.imageView = texture.view;
         imageInfo.sampler = textureSampler;
 
         std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
@@ -302,15 +302,11 @@ void Model::cleanup(VkDevice device) {
         vkDestroySampler(device, textureSampler, nullptr);
         textureSampler = VK_NULL_HANDLE;
     }
-    if (textureImageView != VK_NULL_HANDLE) {
-        vkDestroyImageView(device, textureImageView, nullptr);
-        textureImageView = VK_NULL_HANDLE;
-    }
-    if (textureImage != VK_NULL_HANDLE) {
-        vkDestroyImage(device, textureImage, nullptr);
-        vkFreeMemory(device, textureImageMemory, nullptr);
-        textureImageMemory = VK_NULL_HANDLE;
-    }
+    VulkanUtils::destroyImageResources(device, texture);
+}
+
+void Model::setTransfrom(glm::mat4 transform) {
+
 }
 
 //-to add custom per vert Normal genration function.

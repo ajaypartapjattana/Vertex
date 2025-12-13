@@ -38,6 +38,10 @@ public:
 	int screenHeight;
 
 	void setCamera(Camera* cam) { camera = cam; }
+	void setScreenDimensions(glm::ivec2 extent) {
+		screenWidth = extent.x;
+		screenHeight = extent.y;
+	};
 
 private:
 	TransformMode currentMode;

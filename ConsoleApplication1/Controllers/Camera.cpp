@@ -2,6 +2,7 @@
 #include "Input.h"
 
 #include <glm/gtc/matrix_transform.hpp>
+#include <iostream>
 
 Camera::Camera(glm::vec3 position, float aspectRatio) :
 	position(position), worldUp(0.0f, 1.0f, 0.0f), yaw(-135.0f), pitch(-45.0f), fov(45.0f), aspect(1.0f), nearPlane(0.1f), farPlane(1000.0f) {
@@ -25,6 +26,7 @@ Camera::Camera(glm::vec3 position, float aspectRatio) :
 	};
 
 	camMode = &localMovement;
+	prevTime = std::chrono::high_resolution_clock::now();
 }
 
 void Camera::handleCamera(GLFWwindow* window) {
@@ -156,14 +158,76 @@ void Camera::updateCameraVectors() {
 	f.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
 	f.y = sin(glm::radians(pitch));
 	f.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
-
 	front = glm::normalize(f);
+
+
+	glm::vec3 r = glm::normalize(glm::cross(front, worldUp));
+	glm::vec3 u = glm::normalize(glm::cross(r, front));
+
+	float rollRad = glm::radians(roll);
+	glm::mat3 rollMat = glm::mat3(glm::rotate(glm::mat4(1.0f), rollRad, front));
+	right = glm::normalize(rollMat * r);
+	up = glm::normalize(rollMat * u);
+
 	groundForward = glm::normalize(glm::vec3(front.x, 0.0f, front.z));
-	right = glm::normalize(glm::cross(front, worldUp));
 	groundRight = glm::normalize(glm::cross(groundForward, worldUp));
-	up = glm::normalize(glm::cross(right, front));
 }
 
 float Camera::getCameraFov() {
 	return Camera::fov;
+}
+
+void Camera::accelGyroInp(float& ax, float& ay, float& az, float& gx, float& gy, float& gz) {
+	std::cout << "Accel: " << ax << " " << ay << " " << az << "\n";
+	std::cout << "Gyro:  " << gx << " " << gy << " " << gz << "\n";
+
+	auto now = std::chrono::high_resolution_clock::now();
+	float dt = std::chrono::duration<float>(now - prevTime).count();
+
+	std::cout << "dt: " << dt <<"\n";
+
+	prevTime = now;
+
+	if (dt <= 0.00001f) return;
+	
+	yaw += gz * dt * gyroAccelSensitivity;
+
+	float gyroPitch = pitch + gx * dt;
+	float accelPitch = atan2(-ax, sqrt(ay * ay + az * az));
+
+	pitch = (gyFilterAlpha * gyroPitch + (1.0f - gyFilterAlpha) * accelPitch) * gyroAccelSensitivity;
+
+	std::cout << "yaw: " << yaw << "pitch: " << pitch << std::endl;
+
+	updateCameraVectors();
+}
+
+void Camera::accelGyroInpCHEAP(
+	float& ax, float& ay, float& az,
+	float& gx, float& gy, float& gz)
+{
+	auto now = std::chrono::high_resolution_clock::now();
+	float dt = std::chrono::duration<float>(now - prevTime).count();
+	prevTime = now;
+	if (dt <= 0.00001f) return;
+
+	constexpr float accelWeight = 0.02f;
+
+	pitch -= gy * dt * gyroAccelSensitivity;
+	yaw -= gx * dt * gyroAccelSensitivity;
+	roll -= gz * dt * gyroAccelSensitivity;
+
+	glm::vec3 accel(ax, ay, az);
+	if (glm::length(accel) > 0.0001f)
+	{
+		glm::vec3 down = glm::normalize(-accel);
+
+		float pitchAcc = atan2(down.z, down.y);
+		float rollAcc = atan2(down.x, down.y);
+
+		pitch = glm::mix(pitch, pitchAcc, accelWeight/100.0f);
+		roll = glm::mix(roll, rollAcc, accelWeight);
+	}
+
+	updateCameraVectors();
 }

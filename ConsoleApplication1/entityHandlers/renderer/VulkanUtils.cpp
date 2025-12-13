@@ -77,7 +77,7 @@ void VulkanUtils::endSingleTimeCommands(VkCommandBuffer commandBuffer, VkQueue q
     vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
 }
 
-void VulkanUtils::createImage(VkDevice device, VkPhysicalDevice physicalDevice, uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory) {
+void VulkanUtils::createImageResources(VkDevice device, VkPhysicalDevice physicalDevice, uint32_t width, uint32_t height, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, ImageResources& image) {
     VkImageCreateInfo imageInfo{};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     imageInfo.imageType = VK_IMAGE_TYPE_2D;
@@ -86,30 +86,32 @@ void VulkanUtils::createImage(VkDevice device, VkPhysicalDevice physicalDevice, 
     imageInfo.extent.depth = 1;
     imageInfo.mipLevels = 1;
     imageInfo.arrayLayers = 1;
-    imageInfo.format = format;
+    imageInfo.format = image.format;
     imageInfo.tiling = tiling;
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     imageInfo.usage = usage;
-    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE; //To change if is submitted to the transfer queue.
-    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    imageInfo.samples = image.samples;
     imageInfo.flags = 0;
 
-    if (vkCreateImage(device, &imageInfo, nullptr, &image) != VK_SUCCESS) {
+    if (vkCreateImage(device, &imageInfo, nullptr, &image.image) != VK_SUCCESS) {
         throw std::runtime_error("failed to create image!");
     }
     VkMemoryRequirements memRequirements;
-    vkGetImageMemoryRequirements(device, image, &memRequirements);
+    vkGetImageMemoryRequirements(device, image.image, &memRequirements);
 
     VkMemoryAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocInfo.allocationSize = memRequirements.size;
     allocInfo.memoryTypeIndex = findMemoryType(physicalDevice, memRequirements.memoryTypeBits, properties);
 
-    if (vkAllocateMemory(device, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
+    if (vkAllocateMemory(device, &allocInfo, nullptr, &image.memory) != VK_SUCCESS) {
         throw std::runtime_error("failed to allocate image memory!");
     }
 
-    vkBindImageMemory(device, image, imageMemory, 0);
+    vkBindImageMemory(device, image.image, image.memory, 0);
+
+    image.view = createImageView(device, image.image, image.format, image.aspectFlagBits);
 }
 
 bool VulkanUtils::hasStencilComponent(VkFormat format) {
@@ -247,5 +249,17 @@ void VulkanUtils::createTextureSampler(VkDevice device, VkPhysicalDevice physica
 
     if (vkCreateSampler(device, &samplerInfo, nullptr, &textureSampler) != VK_SUCCESS) {
         throw std::runtime_error("failed to create texture sampler!");
+    }
+}
+
+void VulkanUtils::destroyImageResources(VkDevice device, ImageResources& image) {
+    if (image.view != VK_NULL_HANDLE) {
+        vkDestroyImageView(device, image.view, nullptr);
+        image.view = VK_NULL_HANDLE;
+    }
+    if (image.memory != VK_NULL_HANDLE) {
+        vkDestroyImage(device, image.image, nullptr);
+        vkFreeMemory(device, image.memory, nullptr);
+        image.memory = VK_NULL_HANDLE;
     }
 }

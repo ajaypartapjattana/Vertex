@@ -51,7 +51,7 @@
     <ClCompile Include="entityHandlers\ModelManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="entityHandlers\renderer\utility\VulkanUtils.cpp">
+    <ClCompile Include="entityHandlers\renderer\VulkanUtils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Controllers\transformController.cpp">
@@ -75,6 +75,9 @@
     <ClCompile Include="windowSurface.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Controllers\SensorListner.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="GuiLayer.h">
@@ -95,7 +98,7 @@
     <ClInclude Include="entityHandlers\renderer\utility\Vertex.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="entityHandlers\renderer\utility\VulkanUtils.h">
+    <ClInclude Include="entityHandlers\renderer\VulkanUtils.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Controllers\transformController.h">
@@ -122,9 +125,6 @@
     <ClInclude Include="entityHandlers\renderer\utility\Chunk.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="player.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="entityHandlers\renderer\materials.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -132,6 +132,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="windowSurface.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Controllers\SensorListner.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

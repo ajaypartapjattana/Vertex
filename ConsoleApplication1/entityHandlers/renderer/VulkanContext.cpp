@@ -19,15 +19,15 @@ VulkanContext::VulkanContext(GLFWwindow* window) : window(window) {
     createDescriptorSetLayout();
     createCommandPool();
     createDepthResources();
+    createMSAAResources();
     createFramebuffers();
     createCommandBuffers();
     createSyncObjects();
 }
 
 VulkanContext::~VulkanContext() {
-    vkDestroyImageView(device, depthImageView, nullptr);
-    vkDestroyImage(device, depthImage, nullptr);
-    vkFreeMemory(device, depthImageMemory, nullptr);
+    VulkanUtils::destroyImageResources(device, depthImage);
+    VulkanUtils::destroyImageResources(device, MSAAImage);
 
     for (auto framebuffer : swapChainFramebuffers) {
         vkDestroyFramebuffer(device, framebuffer, nullptr);
@@ -92,13 +92,13 @@ void VulkanContext::recreateSwapChain() {
 
     createImageViews();
     createDepthResources();
+    createMSAAResources();
     createFramebuffers();
 }
 
 void VulkanContext::cleanupSwapChain() {
-    vkDestroyImageView(device, depthImageView, nullptr);
-    vkDestroyImage(device, depthImage, nullptr);
-    vkFreeMemory(device, depthImageMemory, nullptr);
+    VulkanUtils::destroyImageResources(device, depthImage);
+    VulkanUtils::destroyImageResources(device, MSAAImage);
 
     for (auto framebuffer : swapChainFramebuffers) {
         vkDestroyFramebuffer(device, framebuffer, nullptr);

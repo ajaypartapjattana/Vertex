@@ -62,6 +62,5 @@ void main() {
 
     fragTexCoord = inTexCoord;
 
-    // World-space position (using original mesh pos)
     fragPos = vec3(ubo.model * vec4(inPosition, 1.0));
 }
