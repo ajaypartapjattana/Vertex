@@ -5,7 +5,7 @@
 #define TINYOBJLOADER_IMPLEMENTATION
 #include <tiny_obj_loader.h>
 //#define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
+
 
 Model::~Model(){}
 
@@ -101,7 +101,7 @@ void Model::loadFromFile(const std::string& path) {
     std::cout << "trisCount: " << loadedModelAttributes.trisCount << std::endl;
 }
 
-void Model::createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue) {
+/*oid Model::createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue) {
     VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
     VkBuffer stagingBuffer;
@@ -133,9 +133,10 @@ void Model::createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkCom
 
     vkDestroyBuffer(device, stagingBuffer, nullptr);
     vkFreeMemory(device, stagingBufferMemory, nullptr);
-}
+}*/
 
-void Model::createDescriptorPool(VkDevice device, uint16_t MAX_FRAMES_IN_FLIGHT) {
+//void 
+/*Model::createDescriptorPool(VkDevice device, uint16_t MAX_FRAMES_IN_FLIGHT) {
     std::array<VkDescriptorPoolSize, 2> poolSizes;
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
@@ -152,9 +153,10 @@ void Model::createDescriptorPool(VkDevice device, uint16_t MAX_FRAMES_IN_FLIGHT)
     if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
         throw std::runtime_error("failed to create descriptor pool!");
     }
-}
+}*/
 
-void Model::createTexture(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, const std::string& texture_path) {
+//void 
+/*Model::createTexture(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, const std::string& texture_path) {
     int texWidth, texHeight, texChannels;
     stbi_uc* pixels = stbi_load(texture_path.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
     VkDeviceSize imageSize = texWidth * texHeight * 4;
@@ -184,9 +186,10 @@ void Model::createTexture(VkDevice device, VkPhysicalDevice physicalDevice, VkCo
     vkFreeMemory(device, stagingBufferMemory, nullptr);
 
     VulkanUtils::createTextureSampler(device, physicalDevice, textureSampler, VK_FILTER_LINEAR);
-}
+}*/
 
-void Model::createUniformBuffer(VkDevice device, VkPhysicalDevice physicalDevice, uint16_t MAX_FRAMES_IN_FLIGHT) {
+//void
+/*Model::createUniformBuffer(VkDevice device, VkPhysicalDevice physicalDevice, uint16_t MAX_FRAMES_IN_FLIGHT) {
     VkDeviceSize bufferSize = sizeof(Model_UBO);
 
     uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
@@ -197,13 +200,15 @@ void Model::createUniformBuffer(VkDevice device, VkPhysicalDevice physicalDevice
         VulkanUtils::createBuffer(physicalDevice, device, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i], uniformBuffersMemory[i]);
         vkMapMemory(device, uniformBuffersMemory[i], 0, bufferSize, 0, &uniformBuffersMapped[i]);
     }
-}
+}*/
 
-void Model::updateUBO(VkDevice device, const Model_UBO& uboData, uint32_t currentImage) {
+//void
+/*Model::updateUBO(VkDevice device, const Model_UBO& uboData, uint32_t currentImage) {
     memcpy(uniformBuffersMapped[currentImage], &uboData, sizeof(uboData));
-}
+}*/
 
-void Model::createDescriptorSet(VkDevice device, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT) {
+//void 
+/*Model::createDescriptorSet(VkDevice device, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT) {
     std::vector<VkDescriptorSetLayout> layouts(FRAMES_IN_FLIGHT, descriptorSetLayout);
 
     VkDescriptorSetAllocateInfo allocInfo{};
@@ -249,9 +254,10 @@ void Model::createDescriptorSet(VkDevice device, VkDescriptorSetLayout descripto
 
         vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
     }
-}
+}*/
 
-void Model::draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint16_t currentFrame) {
+//void
+/*Model::draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint16_t currentFrame) {
     VkBuffer vertexBuffers[] = { vertexBuffer };
     VkDeviceSize offsets[] = { 0 };
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
@@ -262,9 +268,10 @@ void Model::draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout,
     }
 
     vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
-}
+}*/
 
-void Model::cleanup(VkDevice device) {
+//void 
+/*Model::cleanup(VkDevice device) {
     if (indexBuffer != VK_NULL_HANDLE) {
         vkDestroyBuffer(device, indexBuffer, nullptr);
         vkFreeMemory(device, indexBufferMemory, nullptr);
@@ -303,11 +310,11 @@ void Model::cleanup(VkDevice device) {
         textureSampler = VK_NULL_HANDLE;
     }
     VulkanUtils::destroyImageResources(device, texture);
-}
+}*/
 
-void Model::setTransfrom(glm::mat4 transform) {
-
-}
+//void Model::setTransfrom(glm::mat4 transform) {
+//
+//}
 
 //-to add custom per vert Normal genration function.
 //-to implement spatial hashing to handle larger models.

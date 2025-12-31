@@ -4,14 +4,10 @@
 #include <unordered_map>
 #include <vector>
 #include <memory>
-#include <vulkan/vulkan.h>
 
-#include "renderer/utility/Vertex.h"
-#include "renderer/utility/Chunk.h"
-#include "renderer/VulkanUtils.h"
+#include "core/dataDef/Vertex.h"
+#include "core/resource.h"
 #include "commProtocols/threadCommProtocol.h"
-
-#include "renderer/VulkanContext.h"
 
 #include "FastNoiseLite.h"
 
@@ -47,9 +43,11 @@ struct TextureAtlas {
 	int atlasWidth;
 	int atlasHeight;
 	int tileSize;
+
 	std::unordered_map<uint8_t, glm::vec4> uvRanges;
-	std::vector<unsigned char> ColorData;
-	std::vector<unsigned char> NormalData;
+
+	TextureData ColorData;
+	TextureData NormalData;
 };
 
 struct genratedChunk {
@@ -57,9 +55,14 @@ struct genratedChunk {
 	std::unique_ptr<Chunk> chunk;
 };
 
+struct MeshJob {
+	glm::ivec3 pos;
+	MeshData mesh;
+};
+
 class World {
 public:
-	World(const ContextHandle& handle);
+	//World(const ContextHandle& handle);
 	~World();
 
 	int getChunkCount();
@@ -72,15 +75,15 @@ public:
 	Chunk* findChunk(const glm::ivec3& pos);
 
 	void updateChunkMesh(const glm::ivec3& pos);
-	void uploadChunkToGPU(Chunk& chunk);
-	void createTextureImage(unsigned char* data, ImageResources& image);
-	void draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint16_t currentFrame);
-	void updateUBO(VkDevice device, const World_UBO& uboData, uint32_t currentImage);
+	//void uploadChunkToGPU(Chunk& chunk);
+	//void createTextureImage(unsigned char* data, ImageResources& image);
+	//void draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint16_t currentFrame);
+	//void updateUBO(VkDevice device, const World_UBO& uboData, uint32_t currentImage);
 
 	int getSurfaceZ(glm::vec3 pos);
 	void setBlock(int x, int y, int z, int blockType);
 	
-	void cleanup();
+	//void cleanup();
 
 	uint32_t worldSpherePipeline;
 
@@ -93,29 +96,25 @@ public:
 	int renderDistance = 16;
 
 private:
-	VkDevice device;
-	VkPhysicalDevice physicalDevice;
-	VkQueue queue;
-	VkCommandPool commandPool;
-	VkDescriptorSetLayout descriptorSetLayout;
+	//VkDevice device;
 
 	FastNoiseLite heightMap;
 	TextureAtlas atlas;
 
-	ImageResources colorTexture;
-	ImageResources NormalTexture;
+	TextureData colorTexture;
+	TextureData NormalTexture;
 
-	VkSampler textureSampler{ VK_NULL_HANDLE };
-	VkDescriptorPool descriptorPool{ VK_NULL_HANDLE };
+	//VkSampler textureSampler{ VK_NULL_HANDLE };
+	//VkDescriptorPool descriptorPool{ VK_NULL_HANDLE };
 
-	std::vector<VkDescriptorSet> descriptorSets;
-	std::vector<VkBuffer> uniformBuffers;
-	std::vector<VkDeviceMemory> uniformBuffersMemory;
-	std::vector<void*> uniformBuffersMapped;
+	//std::vector<VkDescriptorSet> descriptorSets;
+	//std::vector<VkBuffer> uniformBuffers;
+	//std::vector<VkDeviceMemory> uniformBuffersMemory;
+	//std::vector<void*> uniformBuffersMapped;
 	
-	void createDescriptorPool(uint16_t MAX_FRAMES_IN_FLIGHT);
-	void createWorldDescriptorSet(VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT);
-	void createWorldUniformBuffer(uint16_t MAX_FRAMES_IN_FLIGHT);
+	//void createDescriptorPool(uint16_t MAX_FRAMES_IN_FLIGHT);
+	//void createWorldDescriptorSet(VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT);
+	//void createWorldUniformBuffer(uint16_t MAX_FRAMES_IN_FLIGHT);
 
 	TextureAtlas buildTextureAtlas(std::vector<BlockData>& inputBlocks, int tileSize);
 

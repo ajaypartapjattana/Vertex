@@ -113,7 +113,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Ext_Libraries\json-develop;C:\Users\ajayp\source\repos\imgui;C:\Ext_Libraries\tinyobjloader;C:\Ext_Libraries\glm-master;C:\Ext_Libraries\glfw-3.4.bin.WIN64\include;C:\VulkanSDK\1.4.321.1\Include;C:\Ext_Libraries\stb_Image;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);C:\Ext_Libraries\json-develop;C:\Users\ajayp\source\repos\imgui;C:\Ext_Libraries\tinyobjloader;C:\Ext_Libraries\glm-master;C:\Ext_Libraries\glfw-3.4.bin.WIN64\include;C:\VulkanSDK\1.4.321.1\Include;C:\Ext_Libraries\stb_Image;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
@@ -132,7 +132,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Ext_Libraries\json-develop;C:\Users\ajayp\source\repos\imgui;C:\Ext_Libraries\tinyobjloader;C:\Ext_Libraries\glm-master;C:\Ext_Libraries\glfw-3.4.bin.WIN64\include;C:\VulkanSDK\1.4.321.1\Include;C:\Ext_Libraries\stb_Image;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);C:\Ext_Libraries\json-develop;C:\Users\ajayp\source\repos\imgui;C:\Ext_Libraries\tinyobjloader;C:\Ext_Libraries\glm-master;C:\Ext_Libraries\glfw-3.4.bin.WIN64\include;C:\VulkanSDK\1.4.321.1\Include;C:\Ext_Libraries\stb_Image;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
@@ -148,7 +148,12 @@
     <ClCompile Include="Controllers\SensorListner.cpp" />
     <ClCompile Include="Controllers\transformController.cpp" />
     <ClCompile Include="Controllers\Utilities\vecMath.cpp" />
-    <ClCompile Include="entityHandlers\renderer\materials.cpp" />
+    <ClCompile Include="renderSystem\renderer\resources\objectResources\materials.cpp" />
+    <ClCompile Include="renderSystem\renderer\resources\objectResources\MeshSystem.cpp" />
+    <ClCompile Include="renderSystem\renderer\resources\Object.cpp" />
+    <ClCompile Include="renderSystem\renderer\pass\ForwardPass\ForwardPass.cpp" />
+    <ClCompile Include="renderSystem\renderer\resources\objectResources\primitive\Mesh.cpp" />
+    <ClCompile Include="core\dataDef\VertexLayout.cpp" />
     <ClCompile Include="entityHandlers\world.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="GuiLayer.cpp" />
@@ -161,38 +166,94 @@
     <ClCompile Include="Controllers\Input.cpp" />
     <ClCompile Include="entityHandlers\model.cpp" />
     <ClCompile Include="entityHandlers\ModelManager.cpp" />
-    <ClCompile Include="entityHandlers\renderer\VulkanUtils.cpp" />
-    <ClCompile Include="entityHandlers\renderer\pipelines.cpp" />
-    <ClCompile Include="entityHandlers\renderer\VulkanContext.cpp" />
+    <ClCompile Include="renderSystem\renderer\resources\objectResources\primitive\Texture.cpp" />
+    <ClCompile Include="renderSystem\renderer\Renderer_core.cpp" />
+    <ClCompile Include="renderSystem\renderer\Renderer_resourceControl.cpp" />
+    <ClCompile Include="renderSystem\RHI\vulkan\Vulkan.cpp" />
+    <ClCompile Include="renderSystem\RHI\vulkan\VulkanBuffer.cpp" />
+    <ClCompile Include="renderSystem\RHI\vulkan\VulkanCommandBuffer.cpp" />
+    <ClCompile Include="renderSystem\RHI\vulkan\VulkanCommandPool.cpp" />
+    <ClCompile Include="renderSystem\RHI\vulkan\VulkanDescriptorLayout.cpp" />
+    <ClCompile Include="renderSystem\RHI\vulkan\VulkanDescriptorPool.cpp" />
+    <ClCompile Include="renderSystem\RHI\vulkan\VulkanDescriptorSet.cpp" />
+    <ClCompile Include="renderSystem\RHI\vulkan\VulkanDescriptorWriter.cpp" />
+    <ClCompile Include="renderSystem\RHI\vulkan\VulkanDevice.cpp" />
+    <ClCompile Include="renderSystem\RHI\vulkan\VulkanImage.cpp" />
+    <ClCompile Include="renderSystem\RHI\vulkan\VulkanPipelineLayout.cpp" />
+    <ClCompile Include="renderSystem\RHI\vulkan\VulkanSampler.cpp" />
+    <ClCompile Include="renderSystem\RHI\vulkan\VulkanSwapchain.cpp" />
+    <ClCompile Include="renderSystem\renderer\resources\objectResources\TextureSystem.cpp" />
+    <ClCompile Include="renderSystem\renderer\utility\VulkanUtils.cpp" />
+    <ClCompile Include="renderSystem\renderer\pass\common\pipelines.cpp" />
+    <ClCompile Include="renderSystem\renderer\Renderer_draw.cpp" />
     <ClCompile Include="windowSurface.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Controllers\Camera.h" />
     <ClInclude Include="Controllers\SensorListner.h" />
-    <ClInclude Include="entityHandlers\renderer\materials.h" />
-    <ClInclude Include="entityHandlers\renderer\VulkanContext.h" />
+    <ClInclude Include="core\resource.h" />
+    <ClInclude Include="renderSystem\renderer\common\Header.h" />
+    <ClInclude Include="renderSystem\renderer\resources\resources.h" />
+    <ClInclude Include="renderSystem\RHI\common\PipelineTypes.h" />
+    <ClInclude Include="renderSystem\RHI\common\BufferTypes.h" />
+    <ClInclude Include="renderSystem\RHI\common\DescriptorTypes.h" />
+    <ClInclude Include="renderSystem\RHI\common\ImageSamplerTypes.h" />
+    <ClInclude Include="renderSystem\RHI\common\ImageTypes.h" />
+    <ClInclude Include="renderSystem\RHI\RHI_Types.h" />
+    <ClInclude Include="renderSystem\RHI\RHI.h" />
+    <ClInclude Include="renderSystem\RHI\forward\vulkanFWD.h" />
+    <ClInclude Include="renderSystem\RHI\common\base\Flag_type.h" />
+    <ClInclude Include="renderSystem\RHI\vulkan\TypeMap\VulkanBufferTypeMap.h" />
+    <ClInclude Include="renderSystem\RHI\vulkan\TypeMap\VulkanDescriptorTypeMap.h" />
+    <ClInclude Include="renderSystem\RHI\vulkan\TypeMap\VulkanImageTypeMap.h" />
+    <ClInclude Include="renderSystem\RHI\vulkan\TypeMap\VulkanSampelrTypeMap.h" />
+    <ClInclude Include="renderSystem\RHI\vulkan\TypeMap\VulkanSamplerTypeMap.h" />
+    <ClInclude Include="renderSystem\RHI\vulkan\Vulkan.h" />
+    <ClInclude Include="renderSystem\RHI\vulkan\Common\VulkanFwd.h" />
+    <ClInclude Include="renderSystem\RHI\vulkan\Common\VulkanCommon.h" />
+    <ClInclude Include="renderSystem\renderer\resources\objectResources\MeshSystem.h" />
+    <ClInclude Include="renderSystem\renderer\resources\Objects.h" />
+    <ClInclude Include="renderSystem\renderer\pass\ForwardPass\ForwardPass.h" />
+    <ClInclude Include="renderSystem\renderer\pass\ForwardPass\batch.h" />
+    <ClInclude Include="renderSystem\renderer\pass\PassRegistry.h" />
+    <ClInclude Include="renderSystem\renderer\pass\RenderPassBase.h" />
+    <ClInclude Include="renderSystem\RHI\vulkan\VulkanDescriptorLayout.h" />
+    <ClInclude Include="renderSystem\RHI\vulkan\VulkanDescriptorPool.h" />
+    <ClInclude Include="renderSystem\RHI\vulkan\VulkanDescriptorSet.h" />
+    <ClInclude Include="renderSystem\RHI\vulkan\VulkanDescriptorWriter.h" />
+    <ClInclude Include="renderSystem\RHI\vulkan\VulkanPipeline.h" />
+    <ClInclude Include="renderSystem\RHI\vulkan\VulkanSampler.h" />
+    <ClInclude Include="renderSystem\RHI\vulkan\VulkanSwapchain.h" />
+    <ClInclude Include="renderSystem\RHI\vulkan\VulkanCommandBuffer.h" />
+    <ClInclude Include="renderSystem\RHI\vulkan\VulkanCommandPool.h" />
+    <ClInclude Include="renderSystem\RHI\vulkan\VulkanBuffer.h" />
+    <ClInclude Include="renderSystem\RHI\vulkan\VulkanDevice.h" />
+    <ClInclude Include="renderSystem\RHI\vulkan\VulkanImage.h" />
+    <ClInclude Include="renderSystem\renderer\resources\objectResources\TextureSystem.h" />
+    <ClInclude Include="renderSystem\renderer\resources\objectResources\materials.h" />
+    <ClInclude Include="core\dataDef\VertexLayout.h" />
+    <ClInclude Include="renderSystem\renderer\uniformDef.h" />
+    <ClInclude Include="renderSystem\renderer\resources\objectResources\primitive\Texture.h" />
+    <ClInclude Include="renderSystem\renderer\resources\objectResources\primitive\Mesh.h" />
+    <ClInclude Include="core\dataDef\Material.h" />
     <ClInclude Include="Controllers\transformController.h" />
     <ClInclude Include="Controllers\Utilities\vecMath.h" />
     <ClInclude Include="entityHandlers\FastNoiseLite.h" />
-    <ClInclude Include="entityHandlers\renderer\utility\Chunk.h" />
-    <ClInclude Include="entityHandlers\renderer\utility\stb_image_write.h" />
+    <ClInclude Include="core\dataDef\stb_image_write.h" />
     <ClInclude Include="entityHandlers\world.h" />
     <ClInclude Include="GuiLayer.h" />
     <ClInclude Include="Controllers\Input.h" />
     <ClInclude Include="entityHandlers\model.h" />
     <ClInclude Include="entityHandlers\ModelManager.h" />
     <ClInclude Include="entityHandlers\commProtocols\threadCommProtocol.h" />
-    <ClInclude Include="entityHandlers\renderer\utility\Vertex.h" />
-    <ClInclude Include="entityHandlers\renderer\VulkanUtils.h" />
-    <ClInclude Include="entityHandlers\renderer\pipelines.h" />
+    <ClInclude Include="core\dataDef\Vertex.h" />
+    <ClInclude Include="renderSystem\renderer\utility\VulkanUtils.h" />
+    <ClInclude Include="renderSystem\renderer\pass\common\pipelines.h" />
+    <ClInclude Include="renderSystem\renderer\Renderer.h" />
     <ClInclude Include="windowSurface.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="ShaderBuild.targets" />
-    <None Include="shaders\basic.frag" />
-    <None Include="shaders\basic.vert" />
-    <None Include="shaders\parabolic.vert" />
-    <None Include="shaders\sphere.vert" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Import Project="$(MSBuildProjectDirectory)\ShaderBuild.targets" />

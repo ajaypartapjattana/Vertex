@@ -86,8 +86,8 @@ std::unique_ptr<Chunk> World::generateChunk(const glm::ivec3& pos) {
 
 	auto chunk = std::make_unique<Chunk>();
 	chunk->chunkPos = pos;
-	chunk->chunkMesh.vertices.clear();
-	chunk->chunkMesh.indices.clear();
+	chunk->meshData.vertices.clear();
+	chunk->meshData.indices.clear();
 
 	int baseX = pos.x * CHUNK_SIZE;
 	int baseZ = pos.z * CHUNK_SIZE;
@@ -419,40 +419,22 @@ void World::GreedyMesher(const Chunk& chunk, std::vector<Vertex>& verts, std::ve
 
 
 
-void World::uploadChunkToGPU(Chunk& chunk) {
-	if (!chunk.dirty && chunk.chunkMesh.vertices.empty()) return;
-
-	VkDeviceSize vertexSize = sizeof(Vertex) * chunk.chunkMesh.vertices.size();
-	VkDeviceSize indexSize = sizeof(uint32_t) * chunk.chunkMesh.indices.size();
-
-	VkBuffer stagingVertexBuffer, stagingIndexBuffer;
-	VkDeviceMemory stagingVertexmemory, stagingIndexMemory;
-
-	VulkanUtils::createBuffer(physicalDevice, device, vertexSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingVertexBuffer, stagingVertexmemory);
-	VulkanUtils::createBuffer(physicalDevice, device, indexSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingIndexBuffer, stagingIndexMemory);
-
-	void* data;
-	vkMapMemory(device, stagingVertexmemory, 0, vertexSize, 0, &data);
-	memcpy(data, chunk.chunkMesh.vertices.data(), (size_t)vertexSize);
-	vkUnmapMemory(device, stagingVertexmemory);
-
-	vkMapMemory(device, stagingIndexMemory, 0, indexSize, 0, &data);
-	memcpy(data, chunk.chunkMesh.indices.data(), (size_t)indexSize);
-	vkUnmapMemory(device, stagingIndexMemory);
-
-	VulkanUtils::createBuffer(physicalDevice, device, vertexSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, chunk.vertexBuffer, chunk.vertexMemory);
-	VulkanUtils::createBuffer(physicalDevice, device, indexSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, chunk.indexBuffer, chunk.indexMemory);
-	VulkanUtils::copyBuffer(commandPool, device, stagingVertexBuffer, chunk.vertexBuffer, vertexSize, queue);
-	VulkanUtils::copyBuffer(commandPool, device, stagingIndexBuffer, chunk.indexBuffer, indexSize, queue);
-		
-	vkDestroyBuffer(device, stagingVertexBuffer, nullptr);
-	vkDestroyBuffer(device, stagingIndexBuffer, nullptr);
-	vkFreeMemory(device, stagingVertexmemory, nullptr);
-	vkFreeMemory(device, stagingIndexMemory, nullptr);
-
-	chunk.dirty = false;
-	chunk.gpuAllocated = true;
-}
+//void World::uploadChunkToGPU(Chunk& chunk) {
+//	if (!chunk.dirty && chunk.meshData.vertices.empty())
+//		return;
+//
+//	
+//
+//	chunk.mesh = new Mesh(
+//		device,
+//		vertexBuffer, vertexMemory,
+//		indexBuffer, indexMemory,
+//		static_cast<uint32_t> (chunk.meshData.indices.size())
+//	);
+//
+//	chunk.dirty = false;
+//	chunk.gpuAllocated = true;
+//}
 
 void World::updateChunkMesh(const glm::ivec3& pos) {
 	auto it = chunks.find(pos);
@@ -568,25 +550,25 @@ void World::updateUBO(VkDevice device, const World_UBO& uboData, uint32_t curren
 	memcpy(uniformBuffersMapped[currentImage], &uboData, sizeof(uboData));
 }
 
-void World::draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint16_t currentFrame) {
-	if (chunks.empty()) return;
-	for (auto& [pos, chunkPtr] : chunks) {
-		Chunk& chunk = *chunkPtr;
-		if (chunk.dirty) uploadChunkToGPU(chunk);
-		if (!chunk.gpuAllocated) continue;
-
-		VkBuffer vertexBuffers[] = { chunk.vertexBuffer };
-		VkDeviceSize offsets[] = { 0 };
-		vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-		vkCmdBindIndexBuffer(commandBuffer, chunk.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
-
-		if (!descriptorSets.empty()) {
-			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
-		}
-
-		vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(chunk.chunkMesh.indices.size()), 1, 0, 0, 0);
-	}
-}
+//void World::draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint16_t currentFrame) {
+//	if (chunks.empty()) return;
+//	for (auto& [pos, chunkPtr] : chunks) {
+//		Chunk& chunk = *chunkPtr;
+//		if (chunk.dirty) uploadChunkToGPU(chunk);
+//		if (!chunk.gpuAllocated) continue;
+//
+//		VkBuffer vertexBuffers[] = { chunk.vertexBuffer };
+//		VkDeviceSize offsets[] = { 0 };
+//		vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+//		vkCmdBindIndexBuffer(commandBuffer, chunk.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+//
+//		if (!descriptorSets.empty()) {
+//			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
+//		}
+//
+//		vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(chunk.chunkMesh.indices.size()), 1, 0, 0, 0);
+//	}
+//}
 
 //int World::getSurfaceZ(glm::vec3 pos) {
 //	glm::ivec2 ChunkCoordinates = getChunkCoordinates(pos);
@@ -609,77 +591,64 @@ void World::setBlock(int x, int y, int z, int blockType) {
 	it->second->dirty = true;
 }
 
-void World::cleanup() {
-	for (auto& [pos, chunkPtr] : chunks) destroyChunkBuffers(*chunkPtr);
-	chunks.clear();
-
-	for (size_t i = 0; i < descriptorSets.size(); ++i) {
-		if (uniformBuffersMapped[i]) {
-			vkUnmapMemory(device, uniformBuffersMemory[i]);
-			uniformBuffersMapped[i] = nullptr;
-		}
-		if (uniformBuffers[i] != VK_NULL_HANDLE) {
-			vkDestroyBuffer(device, uniformBuffers[i], nullptr);
-			vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
-			uniformBuffers[i] = VK_NULL_HANDLE;
-		}
-	}
-	uniformBuffers.clear();
-	uniformBuffersMemory.clear();
-	uniformBuffersMapped.clear();
-	descriptorSets.clear();
-
-	if (descriptorPool != VK_NULL_HANDLE) {
-		vkDestroyDescriptorPool(device, descriptorPool, nullptr);
-		descriptorPool = VK_NULL_HANDLE;
-	}
-
-	if (textureSampler != VK_NULL_HANDLE) {
-		vkDestroySampler(device, textureSampler, nullptr);
-		textureSampler = VK_NULL_HANDLE;
-	}
-	VulkanUtils::destroyImageResources(device, colorTexture);
-	VulkanUtils::destroyImageResources(device, NormalTexture);
-}
+//void World::cleanup() {
+//	for (auto& [pos, chunkPtr] : chunks) destroyChunkBuffers(*chunkPtr);
+//	chunks.clear();
+//
+//	for (size_t i = 0; i < descriptorSets.size(); ++i) {
+//		if (uniformBuffersMapped[i]) {
+//			vkUnmapMemory(device, uniformBuffersMemory[i]);
+//			uniformBuffersMapped[i] = nullptr;
+//		}
+//		if (uniformBuffers[i] != VK_NULL_HANDLE) {
+//			vkDestroyBuffer(device, uniformBuffers[i], nullptr);
+//			vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
+//			uniformBuffers[i] = VK_NULL_HANDLE;
+//		}
+//	}
+//	uniformBuffers.clear();
+//	uniformBuffersMemory.clear();
+//	uniformBuffersMapped.clear();
+//	descriptorSets.clear();
+//
+//	if (descriptorPool != VK_NULL_HANDLE) {
+//		vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+//		descriptorPool = VK_NULL_HANDLE;
+//	}
+//
+//	if (textureSampler != VK_NULL_HANDLE) {
+//		vkDestroySampler(device, textureSampler, nullptr);
+//		textureSampler = VK_NULL_HANDLE;
+//	}
+//	VulkanUtils::destroyImageResources(device, colorTexture);
+//	VulkanUtils::destroyImageResources(device, NormalTexture);
+//}
 
 void World::createChunkBuffers(Chunk& chunk) {
 	uploadChunkToGPU(chunk);
 }
 
-void World::destroyChunkBuffers(Chunk& chunk) {
-	vkDeviceWaitIdle(device);
-	if (chunk.vertexBuffer) vkDestroyBuffer(device, chunk.vertexBuffer, nullptr);
-	if (chunk.indexBuffer) vkDestroyBuffer(device, chunk.indexBuffer, nullptr);
-	if (chunk.vertexMemory) vkFreeMemory(device, chunk.vertexMemory, nullptr);
-	if (chunk.indexMemory) vkFreeMemory(device, chunk.indexMemory, nullptr);
-	chunk.vertexBuffer = VK_NULL_HANDLE;
-	chunk.indexBuffer = VK_NULL_HANDLE;
-	chunk.vertexMemory = VK_NULL_HANDLE;
-	chunk.indexMemory = VK_NULL_HANDLE;
-	chunk.gpuAllocated = false;
-}
-
-void World::createDescriptorPool(uint16_t MAX_FRAMES_IN_FLIGHT) {
-	std::array<VkDescriptorPoolSize, 3> poolSizes;
-	poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-
-	poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-
-	poolSizes[2].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	poolSizes[2].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-
-	VkDescriptorPoolCreateInfo poolInfo{};
-	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-	poolInfo.pPoolSizes = poolSizes.data();
-	poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-
-	if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create descriptor pool!");
-	}
-}
+//void World::createDescriptorPool(uint16_t MAX_FRAMES_IN_FLIGHT) {
+//	std::array<VkDescriptorPoolSize, 3> poolSizes;
+//	poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+//	poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+//
+//	poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+//	poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+//
+//	poolSizes[2].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+//	poolSizes[2].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+//
+//	VkDescriptorPoolCreateInfo poolInfo{};
+//	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+//	poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+//	poolInfo.pPoolSizes = poolSizes.data();
+//	poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+//
+//	if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
+//		throw std::runtime_error("failed to create descriptor pool!");
+//	}
+//}
 
 void World::createWorldDescriptorSet(VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT) {
 	std::vector<VkDescriptorSetLayout> layouts(FRAMES_IN_FLIGHT, descriptorSetLayout);
@@ -801,12 +770,12 @@ void World::chunkMesherLoop() {
 			}
 			chunkPtr = it->second.get();
 		}
-		Mesh mesh;
-		Mesher(*chunkPtr, mesh.vertices, mesh.indices);
+		MeshData meshData;
+		Mesher(*chunkPtr, meshData.vertices, meshData.indices);
 
 		MeshJob job;
 		job.pos = pos;
-		job.mesh = std::move(mesh);
+		job.mesh = std::move(meshData);
 		meshedChunks.push(std::move(job));
 	}
 }
@@ -830,7 +799,7 @@ void World::captureGenratedChunks() {
 		{
 			std::lock_guard<std::mutex> lock(chunkMutex);
 			chunks[job.pos] = std::move(chunkPtr);
-			chunks[job.pos]->chunkMesh = std::move(job.mesh);
+			chunks[job.pos]->meshData = std::move(job.mesh);
 			chunks[job.pos]->dirty = true;
 		}
 		//possible here - chunk upload code.

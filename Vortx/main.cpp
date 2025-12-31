@@ -21,7 +21,7 @@
 #include <filesystem>
 
 #include "windowSurface.h"
-#include "entityHandlers/renderer/VulkanContext.h"
+#include "renderer/utility/VulkanUtils.h"
 
 #include "GuiLayer.h"
 
@@ -29,11 +29,12 @@
 #include "Controllers/transformController.h"
 #include "Controllers/SensorListner.h"
 
-#include "entityHandlers/renderer/pipelines.h"
 #include "entityHandlers/ModelManager.h"
 #include "entityHandlers/world.h"
-#include "entityHandlers/renderer/utility/Vertex.h"
-#include "entityHandlers/renderer/VulkanUtils.h"
+#include "core/dataDef/Vertex.h"
+#include "core/dataDef/VertexLayout.h"
+#include "renderer/utility/VulkanUtils.h"
+#include "renderer/Renderer.h"
 
 const uint32_t WIDTH = 1200;
 const uint32_t HEIGHT = 800;
@@ -97,15 +98,16 @@ private:
 
     QueueFamilyIndices familyIndices;
 
-    PipelineManager pipelineManager{ appHandles.device };
+    Renderer octo{ appHandles, window.handle };
+    
     ModelManager modelManager{ appHandles };
-    World world{ appHandles };
+    //World world{ appHandles };
     Camera camera{ glm::vec3(0.0f, 60.0f, 0.0f), (float)appContext.swapChainExtent.width / appContext.swapChainExtent.width };
     TransformController transformController;
 
-    GuiLayer gui;
+    //GuiLayer gui;
 
-    SensorReceiver sensor;
+    //SensorReceiver sensor;
 
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
     
@@ -159,9 +161,12 @@ private:
             modelManager.update();
             handleInputs();
             buildUI();
-            drawFrame();
-            world.captureGenratedChunks();
-            listenSensor();
+            if (octo.beginFrame()) {
+                octo.drawFrame();
+                octo.endFrame();
+            }
+            //world.captureGenratedChunks();
+            //listenSensor();
         }
         vkDeviceWaitIdle(appHandles.device);
 
@@ -182,223 +187,6 @@ private:
         sensor.getGyro(gx, gy, gz);
 
         camera.accelGyroInpCHEAP(ax, ay, az, gx, gy, gz);
-    }
-
-    void generateRenderMethods() {
-        VkPushConstantRange pushConstantsRange{};
-        pushConstantsRange.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-        pushConstantsRange.size = sizeof(PushConstants);
-        pushConstantsRange.offset = 0;
-
-        VkPipelineLayoutCreateInfo  pipelineLayoutInfo{};
-        pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipelineLayoutInfo.setLayoutCount = 1;
-        pipelineLayoutInfo.pSetLayouts = &appHandles.descriptorSetLayout;
-        pipelineLayoutInfo.pushConstantRangeCount = 1;
-        pipelineLayoutInfo.pPushConstantRanges = &pushConstantsRange;
-
-        if (vkCreatePipelineLayout(appHandles.device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create pipeline layout!");
-        }
-
-        PipelineVertexInput vertexInput{};
-        vertexInput.bindings.push_back(Vertex::getBindingDescription());
-        auto attrib = Vertex::getAttributeDescriptions();
-        vertexInput.attributes.insert(vertexInput.attributes.end(), attrib.begin(), attrib.end());
-
-        PipelineDescription pipeFill_Desc{};
-        pipeFill_Desc.vertShaderPath = "shaders/basic.vert.spv";
-        pipeFill_Desc.fragShaderPath = "shaders/basic.frag.spv";
-        pipeFill_Desc.renderPass = appHandles.renderPass;
-        pipeFill_Desc.pipelineLayout = pipelineLayout;
-        pipeFill_Desc.vertexInput = vertexInput;
-        pipeFill_Desc.cullMode = VK_CULL_MODE_NONE;
-        pipeFill_Desc.rasterSamples = sceneRenderState.MSAASampleCount;
-
-        PipelineDescription pipeEdge_Desc{};
-        pipeEdge_Desc.vertShaderPath = "shaders/basic.vert.spv";
-        pipeEdge_Desc.fragShaderPath = "shaders/basic.frag.spv";
-        pipeEdge_Desc.renderPass = appHandles.renderPass;
-        pipeEdge_Desc.pipelineLayout = pipelineLayout;
-        pipeEdge_Desc.vertexInput = vertexInput;
-        pipeEdge_Desc.polygonMode = VK_POLYGON_MODE_LINE;
-        pipeEdge_Desc.cullMode = VK_CULL_MODE_NONE;
-        pipeEdge_Desc.rasterSamples = sceneRenderState.MSAASampleCount;
-
-        PipelineDescription pipePoint_Desc{};
-        pipePoint_Desc.vertShaderPath = "shaders/basic.vert.spv";
-        pipePoint_Desc.fragShaderPath = "shaders/basic.frag.spv";
-        pipePoint_Desc.renderPass = appHandles.renderPass;
-        pipePoint_Desc.pipelineLayout = pipelineLayout;
-        pipePoint_Desc.vertexInput = vertexInput;
-        pipePoint_Desc.polygonMode = VK_POLYGON_MODE_POINT;
-        pipePoint_Desc.cullMode = VK_CULL_MODE_NONE;
-        pipePoint_Desc.rasterSamples = sceneRenderState.MSAASampleCount;
-
-        PipelineDescription pipeWorldShpere_Desc{};
-        pipeWorldShpere_Desc.vertShaderPath = "shaders/parabolic.vert.spv";
-        pipeWorldShpere_Desc.fragShaderPath = "shaders/basic.frag.spv";
-        pipeWorldShpere_Desc.renderPass = appHandles.renderPass;
-        pipeWorldShpere_Desc.pipelineLayout = pipelineLayout;
-        pipeWorldShpere_Desc.vertexInput = vertexInput;
-        pipeWorldShpere_Desc.cullMode = VK_CULL_MODE_NONE;
-        pipeWorldShpere_Desc.rasterSamples = sceneRenderState.MSAASampleCount;
-
-        renderFill_Pipeline =  pipelineManager.createPipleine(pipeFill_Desc);
-        renderEdge_Pipeline = pipelineManager.createPipleine(pipeEdge_Desc);
-        renderPoint_Pipeline = pipelineManager.createPipleine(pipePoint_Desc);
-        world.worldSpherePipeline = pipelineManager.createPipleine(pipeWorldShpere_Desc);
-    }
-
-    void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
-        VkCommandBufferBeginInfo beginInfo{};
-        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        beginInfo.flags = 0;
-        beginInfo.pInheritanceInfo = nullptr;
-
-        if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
-            throw std::runtime_error("failed to begin recording command buffer");
-        }
-
-        VkRenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.renderPass = appHandles.renderPass;
-        renderPassInfo.framebuffer = appContext.swapChainFramebuffers[imageIndex];
-        renderPassInfo.renderArea.offset = { 0,0 };
-        renderPassInfo.renderArea.extent = appContext.swapChainExtent;
-
-        std::array<VkClearValue, 3> clearValues{};
-        clearValues[0].color = { { 0.0f, 0.0f, 0.0f, 1.0f } };
-        clearValues[1].color = { { 0.0f, 0.0f, 0.0f, 1.0f} };
-        clearValues[2].depthStencil = { 1.0f, 0 };
-
-        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-        renderPassInfo.pClearValues = clearValues.data();
-
-        vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-        VkViewport viewport{};
-        viewport.x = 0.0f;
-        viewport.y = 0.0f;
-        viewport.width = static_cast<float>(appContext.swapChainExtent.width);
-        viewport.height = static_cast<float>(appContext.swapChainExtent.height);
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-        vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-        
-        VkRect2D scissor{};
-        scissor.offset = { 0,0 };
-        scissor.extent = appContext.swapChainExtent;
-        vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
-
-        switch (drawMode) {
-        case objectMode:
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineManager.get(renderFill_Pipeline).pipeline);
-            break;
-        case wireframeMode:
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineManager.get(renderEdge_Pipeline).pipeline);
-            break;
-        case pointMode:
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineManager.get(renderPoint_Pipeline).pipeline);
-            break;
-        case curvyWorld:
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineManager.get(world.worldSpherePipeline).pipeline);;
-            break;
-        default:
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineManager.get(renderFill_Pipeline).pipeline);
-        }
-
-        PushConstants pc{};
-        pc.useTexture = (sceneRenderState.enableTextures) ? 1 : 0;
-        vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pc);
-
-        world.draw(commandBuffer, pipelineLayout, currentFrame);
-        modelManager.drawAll(commandBuffer, pipelineLayout, currentFrame);
-
-        gui.endFrame(appContext.commandBuffers[currentFrame]);
-
-        vkCmdEndRenderPass(commandBuffer);
-
-        if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
-            throw std::runtime_error("failed to record command buffer!");
-        }
-    }
-    void drawFrame() {
-        vkWaitForFences(appHandles.device, 1, &appContext.inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
-
-        if (appContext.swapChainExtent.width == 0 || appContext.swapChainExtent.height == 0) {
-            glfwWaitEvents();
-            return;
-        }
-
-        uint32_t imageIndex;
-        VkResult result =  vkAcquireNextImageKHR(appHandles.device, appContext.swapChain, UINT64_MAX, appContext.imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
-
-        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
-            std::cout << "window recreated" << std::endl;
-            appContext.recreateSwapChain();
-            transformController.setScreenDimensions(glm::ivec2(appContext.swapChainExtent.width, appContext.swapChainExtent.height));
-            camera.setAspectRatio(appContext.swapChainExtent.width / (float)appContext.swapChainExtent.height);
-            return;
-        }
-        else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-            throw std::runtime_error("failed to acquire swap chain image!");
-        }
-
-        if (appContext.imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
-            vkWaitForFences(appHandles.device, 1, &appContext.imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
-        }
-        appContext.imagesInFlight[imageIndex] = appContext.inFlightFences[currentFrame];
-
-        updateUniformBuffer(currentFrame);
-
-        vkResetFences(appHandles.device, 1, &appContext.inFlightFences[currentFrame]);
-
-        vkResetCommandBuffer(appContext.commandBuffers[currentFrame], 0);
-        recordCommandBuffer(appContext.commandBuffers[currentFrame], imageIndex);
-
-        VkSubmitInfo submitInfo{};
-        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-
-        VkSemaphore waitSemaphores[] = { appContext.imageAvailableSemaphores[currentFrame] };
-        VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-        submitInfo.waitSemaphoreCount = 1;
-        submitInfo.pWaitSemaphores = waitSemaphores;
-        submitInfo.pWaitDstStageMask = waitStages;
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &appContext.commandBuffers[currentFrame];
-
-        VkSemaphore signalSemaphores[] = { appContext.renderFinishedSemaphores[currentFrame] };
-        submitInfo.signalSemaphoreCount = 1;
-        submitInfo.pSignalSemaphores = signalSemaphores;
-
-
-        if (vkQueueSubmit(appHandles.graphicsQueue, 1, &submitInfo, appContext.inFlightFences[currentFrame]) != VK_SUCCESS) {
-            throw std::runtime_error("failed to submit draw command buffer!");
-        }
-
-        VkPresentInfoKHR presentInfo{};
-        presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-        presentInfo.waitSemaphoreCount = 1;
-        presentInfo.pWaitSemaphores = signalSemaphores;
-        VkSwapchainKHR swapChains[] = { appContext.swapChain };
-        presentInfo.swapchainCount = 1;
-        presentInfo.pSwapchains = swapChains;
-        presentInfo.pImageIndices = &imageIndex;
-
-        result = vkQueuePresentKHR(appHandles.presentQueue, &presentInfo);
-
-        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
-            framebufferResized = false;
-            appContext.recreateSwapChain();
-            transformController.setScreenDimensions(glm::ivec2(appContext.swapChainExtent.width, appContext.swapChainExtent.height));
-            camera.setAspectRatio(appContext.swapChainExtent.width / (float)appContext.swapChainExtent.height);
-            return;
-        }else if (result != VK_SUCCESS) {
-            throw std::runtime_error("failed to acquire swap chain image!");
-        }
-
-        currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
     void updateUniformBuffer(uint32_t currentImage) {

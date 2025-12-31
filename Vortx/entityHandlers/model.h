@@ -1,6 +1,5 @@
 #pragma once
 
-#include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
 #include <vector>
 #include <string>
@@ -8,8 +7,7 @@
 
 #include <json-develop/single_include/nlohmann/json.hpp>
 
-#include "renderer/utility/Vertex.h"
-#include "renderer/VulkanUtils.h"
+#include "core/dataDef/Vertex.h"
 
 using json = nlohmann::json;
 
@@ -57,36 +55,36 @@ public:
 	void metaLoad(const std::string& filePath);
 
 	void loadFromFile(const std::string& path);
-	void createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue);
-	void createDescriptorPool(VkDevice device, uint16_t MAX_FRAMES_IN_FLIGHT);
-	void createUniformBuffer(VkDevice device, VkPhysicalDevice physicalDevice, uint16_t MAX_FRAMES_IN_FLIGHT);
-	void updateUBO(VkDevice device, const Model_UBO& uboData, uint32_t currentImage);
-	void createTexture(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, const std::string& texture_path);
-	void createDescriptorSet(VkDevice device, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT);
+	//void createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue);
+	//void createDescriptorPool(VkDevice device, uint16_t MAX_FRAMES_IN_FLIGHT);
+	//void createUniformBuffer(VkDevice device, VkPhysicalDevice physicalDevice, uint16_t MAX_FRAMES_IN_FLIGHT);
+	//void updateUBO(VkDevice device, const Model_UBO& uboData, uint32_t currentImage);
+	//void createTexture(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, const std::string& texture_path);
+	//void createDescriptorSet(VkDevice device, VkDescriptorSetLayout descriptorSetLayout, uint16_t FRAMES_IN_FLIGHT);
 
-	void draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint16_t currentFrame);
+	//void draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint16_t currentFrame);
 	void setTransfrom(glm::mat4 tranform);
 
-	void cleanup(VkDevice device);
+	//void cleanup(VkDevice device);
 
 private:
 
 	std::vector<Vertex> vertices;
 	std::vector<uint32_t> indices;
 
-	VkBuffer vertexBuffer{ VK_NULL_HANDLE };
-	VkDeviceMemory vertexBufferMemory{ VK_NULL_HANDLE };
-	VkBuffer indexBuffer{ VK_NULL_HANDLE };
-	VkDeviceMemory indexBufferMemory{ VK_NULL_HANDLE };
+	//VkBuffer vertexBuffer{ VK_NULL_HANDLE };
+	//VkDeviceMemory vertexBufferMemory{ VK_NULL_HANDLE };
+	//VkBuffer indexBuffer{ VK_NULL_HANDLE };
+	//VkDeviceMemory indexBufferMemory{ VK_NULL_HANDLE };
 
-	VkDescriptorPool descriptorPool{ VK_NULL_HANDLE };
+	//VkDescriptorPool descriptorPool{ VK_NULL_HANDLE };
 
-	std::vector<VkBuffer> uniformBuffers;
-	std::vector<VkDeviceMemory> uniformBuffersMemory;
-	std::vector<void*> uniformBuffersMapped;
+	//std::vector<VkBuffer> uniformBuffers;
+	//std::vector<VkDeviceMemory> uniformBuffersMemory;
+	//std::vector<void*> uniformBuffersMapped;
 
-	ImageResources texture;
-	VkSampler textureSampler{ VK_NULL_HANDLE };
+	//ImageResources texture;
+	//VkSampler textureSampler{ VK_NULL_HANDLE };
 
-	std::vector<VkDescriptorSet> descriptorSets;
+	//std::vector<VkDescriptorSet> descriptorSets;
 };

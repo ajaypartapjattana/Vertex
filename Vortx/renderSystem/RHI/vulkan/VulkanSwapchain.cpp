@@ -1,0 +1,104 @@
+#include "VulkanSwapchain.h"
+
+#include "TypeMap/VulkanImageTypeMap.h"
+
+#include "VulkanDevice.h"
+
+
+VulkanSwapchain::VulkanSwapchain(VulkanDevice* device, uint32_t width, uint32_t height)
+	: device(device)
+{
+	createSwapchain(width, height);
+	createImageView();
+}
+
+VulkanSwapchain::~VulkanSwapchain() {
+	VkDevice vkDevice = device->getDevice();
+
+	for (auto view : imageViews) {
+		vkDestroyImageView(vkDevice, view, nullptr);
+	}
+
+	if (swapchain) {
+		vkDestroySwapchainKHR(vkDevice, swapchain, nullptr);
+	}
+}
+
+void VulkanSwapchain::createSwapchain(uint32_t width, uint32_t height) {
+	VkSurfaceCapabilitiesKHR caps;
+	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device->getPhysicalDevice(), device->getSurface(), &caps);
+
+	extent = { width, height };
+
+	uint32_t imageCount = caps.minImageCount + 1;
+	if (caps.maxImageCount > 0 && imageCount > caps.maxImageCount) {
+		imageCount = caps.maxImageCount;
+	}
+
+	imageFormat = ImageFormat::BGRA8;
+
+	VkSwapchainCreateInfoKHR createInfo{};
+	createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+	createInfo.surface = device->getSurface();
+	createInfo.minImageCount = imageCount;
+	createInfo.imageFormat = toVkFormat(imageFormat);
+	createInfo.imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+	createInfo.imageExtent.width = extent.width;
+	createInfo.imageExtent.height = extent.height;
+	createInfo.imageArrayLayers = 1;
+	createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+	createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	createInfo.preTransform = caps.currentTransform;
+	createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+	createInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+	createInfo.clipped = VK_TRUE;
+
+	if (vkCreateSwapchainKHR(device->getDevice(), &createInfo, nullptr, &swapchain) != VK_SUCCESS) {
+		throw std::runtime_error("failed to create swapchain!");
+	}
+
+	uint32_t count = 0;
+	vkGetSwapchainImagesKHR(device->getDevice(), swapchain, &count, nullptr);
+
+	images.resize(count);
+	vkGetSwapchainImagesKHR(device->getDevice(), swapchain, &count, images.data());
+}
+
+void VulkanSwapchain::createImageView() {
+	imageViews.resize(images.size());
+
+	for (uint32_t i = 0; i < images.size(); i++) {
+		VkImageViewCreateInfo viewInfo{};
+		viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		viewInfo.image = images[i];
+		viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		viewInfo.format = toVkFormat(imageFormat);
+		viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		viewInfo.subresourceRange.baseMipLevel = 0;
+		viewInfo.subresourceRange.levelCount = 1;
+		viewInfo.subresourceRange.baseArrayLayer = 0;
+		viewInfo.subresourceRange.layerCount = 1;
+
+		if (vkCreateImageView(device->getDevice(), &viewInfo, nullptr, &imageViews[i]) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create an image's view");
+		}
+	}
+}
+
+uint32_t VulkanSwapchain::accquireNextImage(VkSemaphore semaphore) {
+	uint32_t imageIndex;
+	vkAcquireNextImageKHR(device->getDevice(), swapchain, UINT64_MAX, semaphore, nullptr, &imageIndex);
+	return imageIndex;
+}
+
+void VulkanSwapchain::present(uint32_t imageIndex, VkSemaphore waitSemaphore) {
+	VkPresentInfoKHR presentInfo{};
+	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+	presentInfo.waitSemaphoreCount = 1;
+	presentInfo.pWaitSemaphores = &waitSemaphore;
+	presentInfo.swapchainCount = 1;
+	presentInfo.pSwapchains = &swapchain;
+	presentInfo.pImageIndices = &imageIndex;
+
+	vkQueuePresentKHR(device->getPresentQueue(), &presentInfo);
+}
