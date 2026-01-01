@@ -10,7 +10,7 @@ class VulkanBuffer;
 
 class VulkanImage {
 public:
-	VulkanImage(VulkanDevice* device, const VulkanImageDesc& desc, VulkanSampler* sampler = nullptr);
+	VulkanImage(VulkanDevice& device, const VulkanImageDesc& desc, VulkanSampler* sampler = nullptr);
 
 	VulkanImage(const VulkanImage&) = delete;
 	VulkanImage& operator=(const VulkanImage&) = delete;
@@ -39,7 +39,7 @@ private:
 	void allocateMemory();
 
 private:
-	VulkanDevice* device = nullptr;
+	VulkanDevice& device;
 
 	VulkanSampler* sampler;
 

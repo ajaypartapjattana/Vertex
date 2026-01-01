@@ -12,7 +12,7 @@ class VulkanImage;
 
 class VulkanDescriptorWriter {
 public:
-	VulkanDescriptorWriter(VulkanDevice* device, const VulkanDescriptorSet& set);
+	VulkanDescriptorWriter(VulkanDevice& device, const VulkanDescriptorSet& set);
 
 	VulkanDescriptorWriter& writeBuffer(uint32_t binding, const VulkanBuffer& buffer, DescriptorType type, uint64_t offset = 0, uint64_t range);
 	VulkanDescriptorWriter& writeImage(uint32_t binding, const VulkanImage& image, DescriptorType type);
@@ -20,7 +20,7 @@ public:
 	void commit();
 
 private:
-	VulkanDevice* device = nullptr;
+	VulkanDevice& device;
 	VkDescriptorSet descriptorSet = nullptr;
 
 	std::vector<VkWriteDescriptorSet> writes;

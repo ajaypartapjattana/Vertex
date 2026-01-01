@@ -34,7 +34,7 @@ void getAccessFlags(ImageLayout oldLayout, ImageLayout newLayout, VkAccessFlags&
 	}
 }
 
-VulkanImage::VulkanImage(VulkanDevice* device, const VulkanImageDesc& desc, VulkanSampler* sampler = nullptr)
+VulkanImage::VulkanImage(VulkanDevice& device, const VulkanImageDesc& desc, VulkanSampler* sampler = nullptr)
 	: device(device), sampler(sampler)
 {
 	format = desc.format;
@@ -45,8 +45,15 @@ VulkanImage::VulkanImage(VulkanDevice* device, const VulkanImageDesc& desc, Vulk
 	createImageView(desc.usage);
 }
 
-VulkanImage::VulkanImage(VulkanImage&& other) noexcept {
-	*this = std::move(other);
+VulkanImage::VulkanImage(VulkanImage&& other) noexcept
+	: device(other.device), image(other.image), memory(other.memory), imageView(other.imageView)
+{
+	format = other.format;
+	layout = other.layout;
+
+	other.image = VK_NULL_HANDLE;
+	other.memory = VK_NULL_HANDLE;
+	other.imageView = VK_NULL_HANDLE;
 }
 
 VulkanImage& VulkanImage::operator=(VulkanImage&& other) noexcept {
@@ -62,7 +69,6 @@ VulkanImage& VulkanImage::operator=(VulkanImage&& other) noexcept {
 	format = other.format;
 	layout = other.layout;
 
-	other.device = nullptr;
 	other.image = nullptr;
 	other.memory = nullptr;
 	other.imageView = nullptr;
@@ -74,7 +80,7 @@ VulkanImage::~VulkanImage() {
 }
 
 void VulkanImage::destroy() {
-	VkDevice vkDevice = device->getDevice();
+	VkDevice vkDevice = device.getDevice();
 
 	if (imageView) {
 		vkDestroyImageView(vkDevice, imageView, nullptr);
@@ -159,25 +165,27 @@ void VulkanImage::createImage(ImageExtent2D extent, ImageUsageFlags usage) {
 	imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 	imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-	if (vkCreateImage(device->getDevice(), &imageInfo, nullptr, &image) != VK_SUCCESS) {
+	if (vkCreateImage(device.getDevice(), &imageInfo, nullptr, &image) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create an image!");
 	}
 }
 
 void VulkanImage::allocateMemory() {
+	VkDevice vkDevice = device.getDevice();
+
 	VkMemoryRequirements memReq;
-	vkGetImageMemoryRequirements(device->getDevice(), image, &memReq);
+	vkGetImageMemoryRequirements(vkDevice, image, &memReq);
 
 	VkMemoryAllocateInfo allocInfo{};
 	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	allocInfo.allocationSize = memReq.size;
-	allocInfo.memoryTypeIndex = device->findMemoryType(memReq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	allocInfo.memoryTypeIndex = device.findMemoryType(memReq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-	if (vkAllocateMemory(device->getDevice(), &allocInfo, nullptr, &memory) != VK_SUCCESS) {
+	if (vkAllocateMemory(vkDevice, &allocInfo, nullptr, &memory) != VK_SUCCESS) {
 		throw std::runtime_error("failed to allocate memory to an image!");
 	}
 
-	vkBindImageMemory(device->getDevice(), image, memory, 0);
+	vkBindImageMemory(vkDevice, image, memory, 0);
 }
 
 void VulkanImage::createImageView(ImageUsageFlags usage) {
@@ -196,7 +204,7 @@ void VulkanImage::createImageView(ImageUsageFlags usage) {
 	viewCreateInfo.subresourceRange.baseArrayLayer = 0;
 	viewCreateInfo.subresourceRange.layerCount = 1;
 
-	if (vkCreateImageView(device->getDevice(), &viewCreateInfo, nullptr, &imageView) != VK_SUCCESS) {
+	if (vkCreateImageView(device.getDevice(), &viewCreateInfo, nullptr, &imageView) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create an image's view!");
 	}
 }

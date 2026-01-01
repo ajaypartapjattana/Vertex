@@ -88,6 +88,6 @@ typedef struct VkDebugUtilsMessengerEXT_T* VkDebugUtilsMessengerEXT;
    Descriptor helper structs (only pointers allowed in headers)
    ============================================================ */
 
-//typedef struct VkDescriptorBufferInfo VkDescriptorBufferInfo;
-//typedef struct VkDescriptorImageInfo VkDescriptorImageInfo;
-//typedef struct VkWriteDescriptorSet VkWriteDescriptorSet;
+typedef struct VkDescriptorBufferInfo VkDescriptorBufferInfo;
+typedef struct VkDescriptorImageInfo VkDescriptorImageInfo;
+typedef struct VkWriteDescriptorSet VkWriteDescriptorSet;

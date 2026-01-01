@@ -4,7 +4,7 @@
 
 #include "VulkanDevice.h"
 
-VulkanDescriptorSetLayout::VulkanDescriptorSetLayout(VulkanDevice* device, const VulkanDescriptorSetLayoutDesc& desc)
+VulkanDescriptorSetLayout::VulkanDescriptorSetLayout(VulkanDevice& device, const VulkanDescriptorSetLayoutDesc& desc)
 	: device(device)
 {
 	std::vector<VkDescriptorSetLayoutBinding> vkBindings;
@@ -25,31 +25,20 @@ VulkanDescriptorSetLayout::VulkanDescriptorSetLayout(VulkanDevice* device, const
 	createInfo.bindingCount = static_cast<uint32_t>(vkBindings.size());
 	createInfo.pBindings = vkBindings.data();
 
-	if (vkCreateDescriptorSetLayout(device->getDevice(), &createInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
+	if (vkCreateDescriptorSetLayout(device.getDevice(), &createInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create descriptor set layout!");
 	}
 }
 
-VulkanDescriptorSetLayout::VulkanDescriptorSetLayout(VulkanDescriptorSetLayout&& other) noexcept {
-	*this = std::move(other);
-}
-
-VulkanDescriptorSetLayout& VulkanDescriptorSetLayout::operator=(VulkanDescriptorSetLayout&& other) noexcept{
-	if (this == &other)
-		return *this;
-
-	device = other.device;
-	descriptorSetLayout = other.descriptorSetLayout;
-
+VulkanDescriptorSetLayout::VulkanDescriptorSetLayout(VulkanDescriptorSetLayout&& other) noexcept
+	: device(other.device), descriptorSetLayout(other.descriptorSetLayout)
+{
 	other.descriptorSetLayout = nullptr;
-	other.device = nullptr;
-
-	return *this;
 }
 
 VulkanDescriptorSetLayout::~VulkanDescriptorSetLayout() {
 	if (descriptorSetLayout) {
-		vkDestroyDescriptorSetLayout(device->getDevice(), descriptorSetLayout, nullptr);
+		vkDestroyDescriptorSetLayout(device.getDevice(), descriptorSetLayout, nullptr);
 	}
 }
 

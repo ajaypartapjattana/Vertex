@@ -8,13 +8,13 @@ class VulkanCommandBuffer;
 
 class VulkanBuffer {
 public:
-	VulkanBuffer(VulkanDevice* device, const VulkanBufferDesc& desc);
+	VulkanBuffer(VulkanDevice& device, const VulkanBufferDesc& desc);
 
 	VulkanBuffer(const VulkanBuffer&) = delete;
 	VulkanBuffer& operator=(const VulkanBuffer&) = delete;
 
 	VulkanBuffer(VulkanBuffer&& other) noexcept;
-	VulkanBuffer& operator=(VulkanBuffer&& other) noexcept;
+	VulkanBuffer& operator=(VulkanBuffer&& other) = delete;
 
 	~VulkanBuffer();
 
@@ -33,7 +33,7 @@ private:
 	void bindMemory();
 
 private:
-	VulkanDevice* device;
+	VulkanDevice& device;
 
 	VkBuffer buffer;
 	VkDeviceMemory memory;

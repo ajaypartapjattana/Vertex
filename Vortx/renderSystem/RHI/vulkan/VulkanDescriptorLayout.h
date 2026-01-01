@@ -7,20 +7,20 @@ class VulkanDevice;
 
 class VulkanDescriptorSetLayout {
 public:
-	VulkanDescriptorSetLayout(VulkanDevice* device, const VulkanDescriptorSetLayoutDesc& desc);
+	VulkanDescriptorSetLayout(VulkanDevice& device, const VulkanDescriptorSetLayoutDesc& desc);
 
 	VulkanDescriptorSetLayout(const VulkanDescriptorSetLayout&) = delete;
 	VulkanDescriptorSetLayout& operator=(const VulkanDescriptorSetLayout&) = delete;
 
 	VulkanDescriptorSetLayout(VulkanDescriptorSetLayout&& other) noexcept;
-	VulkanDescriptorSetLayout& operator=(VulkanDescriptorSetLayout&& other) noexcept;
+	VulkanDescriptorSetLayout& operator=(VulkanDescriptorSetLayout&& other) = delete;
 
 	~VulkanDescriptorSetLayout();
 
 	VkDescriptorSetLayout getHandle() const { return descriptorSetLayout; }
 
 private:
-	VulkanDevice* device;
+	VulkanDevice& device;
 
 	VkDescriptorSetLayout descriptorSetLayout = nullptr;
 };

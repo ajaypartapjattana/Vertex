@@ -41,6 +41,9 @@ struct Material {
 	MaterialParams params;
 };
 
+using MaterialID = uint32_t;
+static constexpr MaterialID INVALID_MATERIAL = UINT32_MAX;
+
 class MaterialSystem {
 public:
 	MaterialSystem(VkDevice device, VkDescriptorPool descriptorPool, TextureSystem& S_textures);

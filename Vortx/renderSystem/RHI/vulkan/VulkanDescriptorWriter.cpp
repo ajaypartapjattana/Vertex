@@ -8,7 +8,7 @@
 #include "VulkanBuffer.h"
 #include "VulkanImage.h"
 
-VulkanDescriptorWriter::VulkanDescriptorWriter(VulkanDevice* device, const VulkanDescriptorSet& set)
+VulkanDescriptorWriter::VulkanDescriptorWriter(VulkanDevice& device, const VulkanDescriptorSet& set)
 	: device(device), descriptorSet(set.getHandle())
 {
 	if (!set.isValid()) {
@@ -64,7 +64,7 @@ void VulkanDescriptorWriter::commit() {
 		throw std::runtime_error("no writes to commit!");
 	}
 
-	vkUpdateDescriptorSets(device->getDevice(), static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+	vkUpdateDescriptorSets(device.getDevice(), static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
 
 	writes.clear();
 	bufferInfos.clear();
