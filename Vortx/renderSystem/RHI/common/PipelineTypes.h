@@ -2,6 +2,7 @@
 
 #include "DescriptorTypes.h"
 #include "ImageTypes.h"
+#include "VertexTypes.h"
 
 #include <string>
 #include <vector>
@@ -14,7 +15,7 @@ struct PushConstantRangeDesc {
 };
 
 struct VulkanPipelineLayoutDesc {
-	std::vector<VulkanDescriptorSetLayoutDesc> setLayouts;
+	std::vector<const DescriptorSetLayoutDesc*> setLayouts;
 	std::vector<PushConstantRangeDesc> pushConstants;
 };
 
@@ -25,8 +26,18 @@ enum class PipelineType {
 	Compute
 };
 
+enum class RasterSamples {
+	Raster_Samples_1,
+	Raster_Samples_2,
+	Raster_Samples_4,
+	Raster_Samples_8,
+	Raster_Samples_16,
+	Raster_Samples_32,
+	Raster_Samples_64
+};
+
 struct ShaderDesc {
-	ShaderStage stage;
+	ShaderStageBit stage;
 	std::string path;
 };
 
@@ -39,14 +50,17 @@ struct BlendState {
 	bool enable = false;
 };
 
-struct VulkanPipelineDesc {
+struct PipelineDesc {
 	PipelineType type;
-	VulkanPipelineLayoutDesc layout;
 
-	std::vector<ShaderDesc> shaders;
+	VertexLayoutDesc vertexLayout;
+
+	RasterSamples samples;
 
 	ImageFormat colorFormat;
 	ImageFormat depthForamt;
+
+	std::vector<ShaderDesc> shaders;
 
 	RasterState raster;
 	BlendState blend;

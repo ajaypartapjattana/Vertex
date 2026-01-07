@@ -9,22 +9,26 @@ class VulkanDevice;
 class VulkanDescriptorSet;
 class VulkanBuffer;
 class VulkanImage;
+class VulkanSampler;
 
 class VulkanDescriptorWriter {
 public:
 	VulkanDescriptorWriter(VulkanDevice& device, const VulkanDescriptorSet& set);
 
-	VulkanDescriptorWriter& writeBuffer(uint32_t binding, const VulkanBuffer& buffer, DescriptorType type, uint64_t offset = 0, uint64_t range);
-	VulkanDescriptorWriter& writeImage(uint32_t binding, const VulkanImage& image, DescriptorType type);
+	VulkanDescriptorWriter& writeCombinedImageSampler(uint32_t binding, const VulkanImage* image);
+	VulkanDescriptorWriter& writeUniformBuffer(uint32_t binding, const VulkanBuffer* buffer, uint64_t range, uint64_t offset = 0);
+	VulkanDescriptorWriter& writeStorageBuffer(uint32_t binding, const VulkanBuffer* buffer, uint64_t range, uint64_t offset = 0);
+	VulkanDescriptorWriter& writeSampledImage(uint32_t binding, uint32_t index, const VulkanImage* image);
+	VulkanDescriptorWriter& writeSampler(uint32_t binding, uint32_t index, const VulkanSampler* sampler);
 
 	void commit();
 
 private:
 	VulkanDevice& device;
-	VkDescriptorSet descriptorSet = nullptr;
 
-	std::vector<VkWriteDescriptorSet> writes;
-	std::vector<VkDescriptorBufferInfo> bufferInfos;
-	std::vector<VkDescriptorImageInfo> imageInfos;
+	const VulkanDescriptorSet& descriptorSet;
+
+	struct Impl;
+	Impl* impl;
 
 };

@@ -9,7 +9,7 @@ class VulkanDescriptorSet;
 
 class VulkanDescriptorPool {
 public:
-	VulkanDescriptorPool(VulkanDevice* device, const VulkanDescriptorPoolDesc& desc);
+	VulkanDescriptorPool(VulkanDevice& device, const DescriptorPoolDesc& desc);
 
 	VulkanDescriptorPool(const VulkanDescriptorPool&) = delete;
 	VulkanDescriptorPool& operator=(const VulkanDescriptorPool&) = delete;
@@ -19,12 +19,12 @@ public:
 
 	~VulkanDescriptorPool();
 
-	VulkanDescriptorSet allocate(const VulkanDescriptorSetLayout& layout);
+	VulkanDescriptorSet allocate(const VulkanDescriptorSetLayout& layout, const uint32_t* variableCounts);
 
 	void reset();
 
 private:
-	VulkanDevice* device = nullptr;
+	VulkanDevice& device;
 
 	VkDescriptorPool descriptorPool = nullptr;
 };

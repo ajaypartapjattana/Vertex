@@ -34,7 +34,7 @@ void getAccessFlags(ImageLayout oldLayout, ImageLayout newLayout, VkAccessFlags&
 	}
 }
 
-VulkanImage::VulkanImage(VulkanDevice& device, const VulkanImageDesc& desc, VulkanSampler* sampler = nullptr)
+VulkanImage::VulkanImage(VulkanDevice& device, const ImageDesc& desc, VulkanSampler* sampler = nullptr)
 	: device(device), sampler(sampler)
 {
 	format = desc.format;

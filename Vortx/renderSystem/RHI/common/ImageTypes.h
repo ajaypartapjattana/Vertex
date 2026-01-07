@@ -47,7 +47,7 @@ enum class PipelineStage {
 
 using PipelineStageFlags = Flags<PipelineStage>;
 
-struct VulkanImageDesc {
+struct ImageDesc {
 	uint32_t width;
 	uint32_t height;
 	ImageUsageFlags usage = ImageUsage::ColorAttachment;

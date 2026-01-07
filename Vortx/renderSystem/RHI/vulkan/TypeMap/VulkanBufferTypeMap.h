@@ -10,6 +10,7 @@ VkBufferUsageFlags toVkBufferUsageFlags(BufferUsageFlags usage) {
 		{BufferUsage::TransferSource,		VK_BUFFER_USAGE_TRANSFER_SRC_BIT},
 		{BufferUsage::TransferDestination,	VK_BUFFER_USAGE_TRANSFER_DST_BIT},
 		{BufferUsage::Uniform,				VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT},
+		{BufferUsage::Storage,				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT},
 		{BufferUsage::Vertex,				VK_BUFFER_USAGE_VERTEX_BUFFER_BIT},
 		{BufferUsage::Index,				VK_BUFFER_USAGE_INDEX_BUFFER_BIT}
 	};

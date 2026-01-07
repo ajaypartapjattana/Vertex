@@ -46,6 +46,11 @@ PipelineID PipelineManager::createPipeline(const PipelineDescription& desc, VkRe
 
 	VkPipelineShaderStageCreateInfo shaderStages[2] = { vertStage, fragStage };
 
+	VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+	inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+	inputAssembly.topology = desc.topology;
+	inputAssembly.primitiveRestartEnable = VK_FALSE;
+
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
@@ -61,10 +66,7 @@ PipelineID PipelineManager::createPipeline(const PipelineDescription& desc, VkRe
 		vertexInputInfo.pVertexAttributeDescriptions = nullptr;
 	}
 
-	VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
-	inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-	inputAssembly.topology = desc.topology;
-	inputAssembly.primitiveRestartEnable = VK_FALSE;
+	
 
 	VkPipelineViewportStateCreateInfo viewportState{};
 	viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;

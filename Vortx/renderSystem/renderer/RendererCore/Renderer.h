@@ -8,23 +8,9 @@
 
 #include "core/resource.h"
 
-#include "renderRes/Mesh.h"
-#include "renderRes/Texture.h"
-#include "uniformDef.h"
-
 #include "RenderPass/PassRegistry.h"
 #include "RenderPass/ForwardPass.h"
 
-struct ImageResources {
-	VkImage image = { VK_NULL_HANDLE };
-	VkImageView view = { VK_NULL_HANDLE };
-	VkDeviceMemory memory = { VK_NULL_HANDLE };
-	VkSampler sampler = { VK_NULL_HANDLE };
-
-	VkFormat format = VK_FORMAT_UNDEFINED;
-	VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
-	VkImageAspectFlagBits aspectFlagBits = VK_IMAGE_ASPECT_NONE;
-};
 
 struct FrameContext {
 	VkCommandBuffer commandBuffer;

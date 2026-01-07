@@ -5,7 +5,7 @@
 #include "VulkanDevice.h"
 #include "VulkanCommandBuffer.h"
 
-VulkanBuffer::VulkanBuffer(VulkanDevice& device, const VulkanBufferDesc& desc)
+VulkanBuffer::VulkanBuffer(VulkanDevice& device, const BufferDesc& desc)
 	: device(device)
 {
 	size = desc.size;
@@ -23,10 +23,30 @@ VulkanBuffer::VulkanBuffer(VulkanBuffer&& other) noexcept
 	other.buffer = VK_NULL_HANDLE;
 	other.memory = VK_NULL_HANDLE;
 	other.mapped = nullptr;
-	other.size = 0;
+}
+
+VulkanBuffer& VulkanBuffer::operator=(VulkanBuffer&& other) noexcept {
+	if (this == &other)
+		return *this;
+
+	destroy();
+	buffer = other.buffer;
+	memory = other.memory;
+	mapped = other.mapped;
+	size = other.size;
+	memoryProperties = other.memoryProperties;
+	usage = other.usage;
+
+	other.buffer = VK_NULL_HANDLE;
+	other.memory = VK_NULL_HANDLE;
+	other.mapped = nullptr;
 }
 
 VulkanBuffer::~VulkanBuffer() {
+	destroy();
+}
+
+void VulkanBuffer::destroy() {
 	VkDevice vkDevice = device.getDevice();
 
 	if (mapped)

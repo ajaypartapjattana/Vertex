@@ -1,43 +1,70 @@
 #include "MeshSystem.h"
-
 #include "primitive/Mesh.h"
 
 #include "renderSystem/RHI/vulkan/VulkanBuffer.h"
 
-MeshSystem::MeshSystem() {}
+#include <stdexcept>
+#include <cassert>
+
+MeshSystem::MeshSystem(VulkanDevice& device)
+	: device(device) {}
 
 MeshSystem::~MeshSystem() {
-	meshes.clear();
+	slots.clear();
+	freeList.clear();
 }
 
-MeshHandle MeshSystem::addMesh(std::unique_ptr<Mesh> mesh) {
-	MeshHandle handle;
+MeshHandle MeshSystem::allocateSlot(std::unique_ptr<Mesh> mesh) {
+	uint32_t index;
 
-	if (!slots_F.empty()) {
-		handle = slots_F.back();
-		slots_F.pop_back();
+	if (!freeList.empty()) {
+		index = freeList.back();
+		freeList.pop_back();
 	} else {
-		handle = static_cast<MeshHandle>(meshes.size());
-		meshes.emplace_back();
+		index = static_cast<uint32_t>(slots.size());
+		slots.emplace_back();
 	}
 
-	meshes[handle] = std::move(mesh);
-	return handle;
+	Slot& slot = slots[index];
+	slot.mesh = std::move(mesh);
+
+	return MeshHandle{ index, slot.generation };
 }
 
-Mesh* MeshSystem::get(MeshHandle handle) {
-	if (handle == INVALID_MESH) return nullptr;
-	if (handle >= meshes.size()) return nullptr;
-	return meshes[handle].get();
+const Mesh& MeshSystem::get(MeshHandle handle) const {
+	assert(handle.index < slots.size());
+
+	const Slot& slot = slots[handle.index];
+
+	assert(slot.mesh && "MeshHandle refers to destroyed mesh");
+	assert(slot.generation == handle.generation && "MeshHandle generation mismatch");
+
+	return *slot.mesh;
 }
 
 void MeshSystem::destroy(MeshHandle handle) {
-	if (handle == INVALID_MESH) return;
-	if (handle >= meshes.size()) return;
-	if (!meshes[handle]) return;
+	uint32_t index = handle.index;
+	if (index == INVALID_MESH.index)
+		return;
+	assert(index < slots.size());
 
-	meshes[handle].reset();
-	slots_F.push_back(handle);
+	Slot& slot = slots[index];
+	if (slot.generation != handle.generation)
+		return;
+
+	pendingDeletes.push_back(index);
+}
+
+void MeshSystem::flushDeletes() {
+	for (uint32_t index : pendingDeletes) {
+		Slot& slot = slots[index];
+
+		if (!slot.mesh) continue;
+		slot.mesh.reset();
+		++slot.generation;
+		freeList.push_back(index);
+	}
+	pendingDeletes.clear();
 }
 
 MeshHandle MeshSystem::createMesh(VulkanCommandBuffer& cmd, const MeshDesc& desc) {
@@ -47,7 +74,7 @@ MeshHandle MeshSystem::createMesh(VulkanCommandBuffer& cmd, const MeshDesc& desc
 	uint64_t vertexBufferSize = desc.vertexCount * desc.vertexSize;
 	uint64_t indexBufferSize = desc.indexCount * sizeof(uint32_t);
 
-	VulkanBufferDesc stagingVertexDesc{};
+	BufferDesc stagingVertexDesc{};
 	stagingVertexDesc.size = vertexBufferSize;
 	stagingVertexDesc.memoryFlags.set(MemoryProperty::HostVisible, MemoryProperty::HostCoherent);
 	stagingVertexDesc.usageFlags = BufferUsage::TransferSource;
@@ -55,7 +82,7 @@ MeshHandle MeshSystem::createMesh(VulkanCommandBuffer& cmd, const MeshDesc& desc
 	VulkanBuffer stagingVertex(device, stagingVertexDesc);
 	stagingVertex.upload(desc.p_vertexData, vertexBufferSize);
 
-	VulkanBufferDesc stagingIndexDesc{};
+	BufferDesc stagingIndexDesc{};
 	stagingIndexDesc.size = indexBufferSize;
 	stagingIndexDesc.memoryFlags.set(MemoryProperty::HostVisible, MemoryProperty::HostCoherent);
 	stagingIndexDesc.usageFlags = BufferUsage::TransferSource;
@@ -63,14 +90,14 @@ MeshHandle MeshSystem::createMesh(VulkanCommandBuffer& cmd, const MeshDesc& desc
 	VulkanBuffer stagingIndex(device, stagingIndexDesc);
 	stagingIndex.upload(desc.p_vertexData, indexBufferSize);
 
-	VulkanBufferDesc vertexDesc{};
+	BufferDesc vertexDesc{};
 	vertexDesc.size = vertexBufferSize;
 	vertexDesc.memoryFlags = MemoryProperty::DeviceLocal;
 	vertexDesc.usageFlags.set(BufferUsage::TransferDestination, BufferUsage::Vertex);
 
 	VulkanBuffer vertexBuffer(device, vertexDesc);
 
-	VulkanBufferDesc indexDesc{};
+	BufferDesc indexDesc{};
 	indexDesc.size = indexBufferSize;
 	indexDesc.memoryFlags = MemoryProperty::DeviceLocal;
 	indexDesc.usageFlags.set(BufferUsage::TransferDestination, BufferUsage::Index);
@@ -82,5 +109,5 @@ MeshHandle MeshSystem::createMesh(VulkanCommandBuffer& cmd, const MeshDesc& desc
 
 	auto mesh = std::make_unique<Mesh>(vertexBuffer, indexBuffer, desc.indexCount);
 
-	return addMesh(std::move(mesh));
+	return allocateSlot(std::move(mesh));
 }

@@ -6,7 +6,7 @@
 #include "VulkanDescriptorLayout.h"
 #include "VulkanDescriptorSet.h"
 
-VulkanDescriptorPool::VulkanDescriptorPool(VulkanDevice* device, const VulkanDescriptorPoolDesc& desc)
+VulkanDescriptorPool::VulkanDescriptorPool(VulkanDevice& device, const DescriptorPoolDesc& desc)
 	: device(device)
 {
 	std::vector<VkDescriptorPoolSize> sizes;
@@ -20,23 +20,23 @@ VulkanDescriptorPool::VulkanDescriptorPool(VulkanDevice* device, const VulkanDes
 
 	VkDescriptorPoolCreateInfo createInfo{};
 	createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	createInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+	createInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT | VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
 	createInfo.maxSets = desc.maxSets;
 	createInfo.poolSizeCount = static_cast<uint32_t>(sizes.size());
 	createInfo.pPoolSizes = sizes.data();
 
-	if (vkCreateDescriptorPool(device->getDevice(), &createInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
+	if (vkCreateDescriptorPool(device.getDevice(), &createInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create descriptor pool!");
 	}
 }
 
 VulkanDescriptorPool::~VulkanDescriptorPool() {
 	if (descriptorPool) {
-		vkDestroyDescriptorPool(device->getDevice(), descriptorPool, nullptr);
+		vkDestroyDescriptorPool(device.getDevice(), descriptorPool, nullptr);
 	}
 }
 
-VulkanDescriptorSet VulkanDescriptorPool::allocate(const VulkanDescriptorSetLayout& layout) {
+VulkanDescriptorSet VulkanDescriptorPool::allocate(const VulkanDescriptorSetLayout& layout, const uint32_t* variableCounts) {
 	VkDescriptorSetLayout vkLayout = layout.getHandle();
 
 	VkDescriptorSetAllocateInfo allocInfo{};
@@ -44,9 +44,19 @@ VulkanDescriptorSet VulkanDescriptorPool::allocate(const VulkanDescriptorSetLayo
 	allocInfo.descriptorPool = descriptorPool;
 	allocInfo.descriptorSetCount = 1;
 	allocInfo.pSetLayouts = &vkLayout;
+	allocInfo.pNext = nullptr;
+
+	VkDescriptorSetVariableDescriptorCountAllocateInfo variableInfo{};
+	if (variableCounts) {
+		variableInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO;
+		variableInfo.descriptorSetCount = 1;
+		variableInfo.pDescriptorCounts = variableCounts;
+
+		allocInfo.pNext = &variableInfo;
+	}
 
 	VkDescriptorSet set = VK_NULL_HANDLE;
-	if (vkAllocateDescriptorSets(device->getDevice(), &allocInfo, &set) != VK_SUCCESS) {
+	if (vkAllocateDescriptorSets(device.getDevice(), &allocInfo, &set) != VK_SUCCESS) {
 		throw std::runtime_error("failed to allocate descriptor set!");
 	}
 
@@ -54,6 +64,6 @@ VulkanDescriptorSet VulkanDescriptorPool::allocate(const VulkanDescriptorSetLayo
 }
 
 void VulkanDescriptorPool::reset() {
-	vkResetDescriptorPool(device->getDevice(), descriptorPool, 0);
+	vkResetDescriptorPool(device.getDevice(), descriptorPool, 0);
 }
 

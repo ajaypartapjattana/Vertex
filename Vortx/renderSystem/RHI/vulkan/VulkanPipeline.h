@@ -6,31 +6,35 @@
 #include <vector>
 
 class VulkanDevice;
-class VulkanDescriptorSetLayout;
-
-class VulkanPipelineLayout {
-public:
-	VulkanPipelineLayout(VulkanDevice* device, const VulkanPipelineLayoutDesc& desc);
-
-	VkPipelineLayout getHandle() const { return layout; }
-
-private:
-	VulkanDevice* device;
-
-	VkPipelineLayout layout = nullptr;
-	std::vector<VulkanDescriptorSetLayout> setLayouts;
-};
+class VulkanPipelineCache;
+class VulkanPipelineLayout;
+class VulkanRenderPass;
 
 class VulkanPipeline {
 public:
-	VulkanPipeline(VulkanDevice* device, const VulkanPipelineDesc& desc);
+	VulkanPipeline(VulkanDevice& device, VulkanPipelineCache& cache);
+
+	VulkanPipeline(const VulkanPipeline&) = delete;
+	VulkanPipeline& operator=(const VulkanPipeline&) = delete;
+
+	VulkanPipeline(VulkanPipeline&& other) noexcept;
+	VulkanPipeline& operator=(VulkanPipeline&& other) noexcept;
+
+	~VulkanPipeline();
+
+	void build(const VulkanRenderPass& renderPass, const VulkanPipelineLayout& layout, const PipelineDesc& desc);
 
 	VkPipeline getHandle() const { return pipeline; }
 
+private:
 
 private:
-	VulkanDevice* device = nullptr;
+	struct Impl;
+	Impl* impl;
+
+	VulkanDevice& device;
+	VulkanPipelineCache& cache;
 
 	VkPipeline pipeline = nullptr;
-	VulkanPipelineLayout layout;
+	bool built = false;
 };

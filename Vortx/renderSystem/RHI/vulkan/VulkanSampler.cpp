@@ -4,7 +4,7 @@
 
 #include "VulkanDevice.h"
 
-VulkanSampler::VulkanSampler(VulkanDevice* device, const VulkanSamplerDesc& desc)
+VulkanSampler::VulkanSampler(VulkanDevice& device, const SamplerDesc& desc)
 	: device(device)
 {
 	VkSamplerCreateInfo createInfo{};
@@ -25,13 +25,33 @@ VulkanSampler::VulkanSampler(VulkanDevice* device, const VulkanSamplerDesc& desc
 	createInfo.compareEnable = VK_FALSE;
 	createInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 
-	if (vkCreateSampler(device->getDevice(), &createInfo, nullptr, &sampler) != VK_SUCCESS) {
+	if (vkCreateSampler(device.getDevice(), &createInfo, nullptr, &sampler) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create sampler!");
 	}
 }
 
+VulkanSampler::VulkanSampler(VulkanSampler&& other) noexcept 
+	: device(other.device), sampler(other.sampler)
+{
+	other.sampler = VK_NULL_HANDLE;
+}
+
+
+VulkanSampler& VulkanSampler::operator=(VulkanSampler&& other) noexcept {
+	if (this == &other)
+		return *this;
+
+	if (sampler)
+		vkDestroySampler(device.getDevice(), sampler, nullptr);
+
+	sampler = other.sampler;
+	other.sampler = VK_NULL_HANDLE;
+
+	return *this;
+}
+
 VulkanSampler::~VulkanSampler(){
 	if (sampler) {
-		vkDestroySampler(device->getDevice(), sampler, nullptr);
+		vkDestroySampler(device.getDevice(), sampler, nullptr);
 	}
 }

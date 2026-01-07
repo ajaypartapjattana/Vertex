@@ -12,7 +12,7 @@ public:
 
 	~Texture() noexcept;
 
-	VulkanImage& getImage() const;
+	VulkanImage& getImage() const { return *image; }
 
 private:
 	friend class TextureSystem;
@@ -21,4 +21,5 @@ private:
 
 private:
 	std::unique_ptr<VulkanImage> image;
+	uint32_t bindlessIndex;
 };

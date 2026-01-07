@@ -13,7 +13,7 @@ enum class SamplerAddressMode {
 	ClampEdge
 };
 
-struct VulkanSamplerDesc {
+struct SamplerDesc {
 	Filter magFilter = Filter::Linear;
 	Filter minFilter = Filter::Linear;
 

@@ -7,7 +7,7 @@ class VulkanDevice;
 
 class VulkanDescriptorSetLayout {
 public:
-	VulkanDescriptorSetLayout(VulkanDevice& device, const VulkanDescriptorSetLayoutDesc& desc);
+	VulkanDescriptorSetLayout(VulkanDevice& device, const DescriptorSetLayoutDesc& desc);
 
 	VulkanDescriptorSetLayout(const VulkanDescriptorSetLayout&) = delete;
 	VulkanDescriptorSetLayout& operator=(const VulkanDescriptorSetLayout&) = delete;

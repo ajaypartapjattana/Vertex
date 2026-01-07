@@ -6,8 +6,9 @@ enum class BufferUsage {
 	TransferSource		= 1 << 0,
 	TransferDestination = 1 << 1,
 	Uniform				= 1 << 2,
-	Vertex				= 1 << 3,
-	Index				= 1 << 4
+	Storage				= 1 << 3,
+	Vertex				= 1 << 4,
+	Index				= 1 << 5
 };
 
 using BufferUsageFlags = Flags<BufferUsage>;
@@ -21,7 +22,7 @@ enum class MemoryProperty {
 
 using MemoryPropertyFlags = Flags<MemoryProperty>;
 
-struct VulkanBufferDesc {
+struct BufferDesc {
 	uint64_t size;
 	BufferUsageFlags usageFlags{};
 	MemoryPropertyFlags memoryFlags{};

@@ -38,6 +38,7 @@ typedef struct VkDescriptorPool_T* VkDescriptorPool;
 typedef struct VkDescriptorSet_T* VkDescriptorSet;
 
 typedef struct VkPipelineLayout_T* VkPipelineLayout;
+typedef struct VkPipelineCache_T* VkPipelineCache;
 typedef struct VkPipeline_T* VkPipeline;
 typedef struct VkRenderPass_T* VkRenderPass;
 typedef struct VkFramebuffer_T* VkFramebuffer;
