@@ -1,0 +1,34 @@
+<RenderRoutine name="ForwardRenderer">
+
+    <Resources>
+
+        <Image name="Color"
+               format="RGBA16F"
+               usage="Color|Sampled"/>
+
+        <Image name="Depth"
+               format="D32"
+               usage="Depth"/>
+
+    </Resources>
+
+    <Passes>
+
+        <Pass name="Geometry" type="Graphics">
+            <Attachments>
+                <Color ref="Color"/>
+                <Depth ref="Depth"/>
+            </Attachments>
+            <Pipeline ref="ForwardLit"/>
+        </Pass>
+
+        <Pass name="UI" type="Graphics">
+            <Attachments>
+                <Color ref="Color"/>
+            </Attachments>
+            <Pipeline ref="UI"/>
+        </Pass>
+
+    </Passes>
+
+</RenderRoutine>

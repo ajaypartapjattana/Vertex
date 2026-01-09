@@ -36,6 +36,8 @@
 #include "renderer/utility/VulkanUtils.h"
 #include "renderer/Renderer.h"
 
+#include "Signboard/Signboard.h"
+
 const uint32_t WIDTH = 1200;
 const uint32_t HEIGHT = 800;
 
@@ -67,17 +69,10 @@ struct PushConstants {
 class Vortx {
 public:
     Vortx()
-    : window(WIDTH, HEIGHT, "Vortx"), 
-        appContext(window.handle), 
-        appHandles(appContext.getContext()), 
-        familyIndices(appContext.findQueueFamilies(appHandles.physicalDevice))
-    {
-        glfwSetWindowUserPointer(window.handle, this);
-        glfwSetFramebufferSizeCallback(window.handle, framebufferResizeCallback);
-        glfwSetDropCallback(window.handle, fileDropCallback);
+    {   
 
-        Input::init(window.handle);
-        gui.init(appHandles, familyIndices.graphicsFamily.value(), appContext.swapChainImages.size(), window.handle);
+        Input::init(window.window);
+        gui.init(appHandles, familyIndices.graphicsFamily.value(), appContext.swapChainImages.size(), window.window);
 
         transformController.setCamera(&camera);
         transformController.setScreenDimensions(glm::ivec2(appContext.swapChainExtent.width, appContext.swapChainExtent.height));
@@ -91,16 +86,9 @@ public:
     }
 
 private:
-    WindowSurface window;
+    Signboard board;
 
-    VulkanContext appContext;
-    ContextHandle appHandles;
-
-    QueueFamilyIndices familyIndices;
-
-    Renderer octo{ appHandles, window.handle };
-    
-    ModelManager modelManager{ appHandles };
+    ModelManager modelManager;
     //World world{ appHandles };
     Camera camera{ glm::vec3(0.0f, 60.0f, 0.0f), (float)appContext.swapChainExtent.width / appContext.swapChainExtent.width };
     TransformController transformController;
@@ -109,28 +97,9 @@ private:
 
     //SensorReceiver sensor;
 
-    VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
-    
-    PipelineID renderFill_Pipeline = INVALID_PIPELINE;
-    PipelineID renderEdge_Pipeline = INVALID_PIPELINE;
-    PipelineID renderPoint_Pipeline = INVALID_PIPELINE;
-
-    uint32_t currentFrame = 0;
-
-    bool framebufferResized = false;
-
     DrawMode drawMode = DrawMode::objectMode;
 
     RenderState sceneRenderState{ VK_SAMPLE_COUNT_4_BIT, false, glm::vec3(0.5f, 0.5f, 2.0f), glm::vec3(1.0f, 1.0f, 1.0f), false };
-
-    static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
-        auto app = reinterpret_cast<Vortx*>(glfwGetWindowUserPointer(window));
-        app->framebufferResized = true;
-    }
-    static void fileDropCallback(GLFWwindow* window, int count, const char** paths) {
-        auto* app = static_cast<Vortx*>(glfwGetWindowUserPointer(window));
-        app->onFileDrop(window, count, paths);
-    }
 
     void onFileDrop(GLFWwindow* window, int count, const char** paths) {
         for (int i = 0; i < count; i++) {
@@ -156,7 +125,7 @@ private:
     }
 
     void mainloop() {
-        while (!glfwWindowShouldClose(window.handle)) {
+        while (!glfwWindowShouldClose(window.window)) {
             glfwPollEvents();
             modelManager.update();
             handleInputs();
@@ -231,12 +200,12 @@ private:
     }
 
     void handleInputs() {
-        if(!transformController.inTransformationState) camera.handleCamera(window.handle);
+        if(!transformController.inTransformationState) camera.handleCamera(window.window);
         if (!modelManager.selectedModels.empty()) {
             Model* activeModel = *modelManager.selectedModels.begin();
             transformController.handletransforms(activeModel->modelTransforms.position, activeModel->modelTransforms.rotation, activeModel->modelTransforms.scale);    
         }
-        Input::update(window.handle);
+        Input::update(window.window);
     }
 
     void buildUI() {
