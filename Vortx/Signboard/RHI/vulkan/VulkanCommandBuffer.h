@@ -5,6 +5,7 @@
 class VulkanDevice;
 class VulkanCommandPool;
 class VulkanBuffer;
+class VulkanSemaphore;
 
 class VulkanCommandBuffer {
 public:
@@ -14,7 +15,7 @@ public:
 	void begin();
 	void end();
 
-	void submitAndWait();
+	void submit(VulkanSemaphore& waitSemaphore, VulkanSemaphore& signalSemaphore);
 
 	void bindVertexBuffer(const VulkanBuffer& buffer);
 	void bindIndexBuffer(const VulkanBuffer& buffer);

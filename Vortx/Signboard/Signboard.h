@@ -15,7 +15,10 @@ public:
 private:
 	WindowSurface window;
 	WindowEventProxy windowEvents;
+	
 	VulkanRHI vulkanRHI;
+	
 	ResourceAPI resources;
+
 	Renderer renderer;
 };

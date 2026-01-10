@@ -1,12 +1,13 @@
 #pragma once
 
 #include "common/VulkanFwd.h"
-#include "Signboard/RHI/common/ImageTypes.h"
+#include "Signboard/RHI/common/SwapchainTypes.h"
 
 #include <vector>
 
 class VulkanDevice;
 class VulkanImage;
+class VulkanSemaphore;
 
 class VulkanSwapchain {
 public:
@@ -17,8 +18,8 @@ public:
 	ImageExtent2D getExtent() const { return extent; }
 	uint32_t getImageCount() const { return static_cast<uint32_t>(images.size()); }
 
-	uint32_t accquireNextImage(VkSemaphore semaphore);
-	void present(uint32_t imageIndex, VkSemaphore waitSemaphore);
+	SwapchainImageAcquire accquireNextImage(VulkanSemaphore semaphore);
+	void present(uint32_t imageIndex, VulkanSemaphore waitSemaphore);
 
 	const VulkanImage& getImage(uint32_t index) const { return images[index]; }
 

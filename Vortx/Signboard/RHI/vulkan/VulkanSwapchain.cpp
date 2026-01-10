@@ -1,9 +1,11 @@
 #include "VulkanSwapchain.h"
 
 #include "TypeMap/VulkanImageTypeMap.h"
+#include "TypeMap/VulkanSwapchainTypeMap.h"
 
 #include "VulkanDevice.h"
 #include "VulkanImage.h"
+#include "VulkanSemaphore.h"
 
 VulkanSwapchain::VulkanSwapchain(VulkanDevice& device, uint32_t width, uint32_t height)
 	: device(device)
@@ -63,17 +65,20 @@ void VulkanSwapchain::createSwapchain(uint32_t width, uint32_t height) {
 	}
 }
 
-uint32_t VulkanSwapchain::accquireNextImage(VkSemaphore semaphore) {
-	uint32_t imageIndex;
-	vkAcquireNextImageKHR(device.getDevice(), swapchain, UINT64_MAX, semaphore, nullptr, &imageIndex);
-	return imageIndex;
+SwapchainImageAcquire VulkanSwapchain::accquireNextImage(VulkanSemaphore semaphore) {
+	uint32_t index;
+	VkResult result = vkAcquireNextImageKHR(device.getDevice(), swapchain, UINT64_MAX, semaphore.get(), nullptr, &index);
+	
+	return SwapchainImageAcquire{toSwapchainAcquireResult(result), index};
 }
 
-void VulkanSwapchain::present(uint32_t imageIndex, VkSemaphore waitSemaphore) {
+void VulkanSwapchain::present(uint32_t imageIndex, VulkanSemaphore waitSemaphore) {
+	VkSemaphore semaphore = waitSemaphore.get();
+
 	VkPresentInfoKHR presentInfo{};
 	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 	presentInfo.waitSemaphoreCount = 1;
-	presentInfo.pWaitSemaphores = &waitSemaphore;
+	presentInfo.pWaitSemaphores = &semaphore;
 	presentInfo.swapchainCount = 1;
 	presentInfo.pSwapchains = &swapchain;
 	presentInfo.pImageIndices = &imageIndex;

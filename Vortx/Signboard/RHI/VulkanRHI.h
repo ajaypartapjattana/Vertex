@@ -7,11 +7,20 @@
 
 #include "vulkan/VulkanCommandPool.h"
 
+struct RHIView {
+	VulkanDevice& device;
+	VulkanSwapchain& swapchain;
+	VulkanCommandPool& commandPool;
+};
+
 class GLFWwindow;
 
 class VulkanRHI {
 public:
 	VulkanRHI(GLFWwindow* window);
+	~VulkanRHI();
+
+	RHIView getRHIView();
 
 	VulkanDevice& getDevice() { return device; }
 

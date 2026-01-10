@@ -26,6 +26,8 @@ public:
 
 	uint32_t findMemoryType(uint32_t typeFilter, MemoryPropertyFlags properties) const;
 
+	void waitIdle();
+
 private:
 	void createSurface(GLFWwindow* window);
 	void pickPhysicalDevice();

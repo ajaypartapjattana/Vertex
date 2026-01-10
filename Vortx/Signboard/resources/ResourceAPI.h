@@ -16,14 +16,16 @@
 #include "DescriptorSchema.h"
 
 struct ResourceView {
-	ObjectSystem&		objectSystem;
-	ViewStateSystem&	viewStateSystem;
-
 	PipelineSystem&		pipelineSystem;
 	MaterialSystem&		materialSystem;
 	TextureSystem&		textureSystem;
 	SamplerSystem&		samplerSystem;
 	MeshSystem&			meshSystem;
+};
+
+struct SceneView {
+	ObjectSystem& objectSystem;
+	ViewStateSystem& viewStateSystem;
 };
 
 struct MeshDesc;
@@ -40,6 +42,7 @@ public:
 	~ResourceAPI() = default;
 
 	ResourceView getResourceView();
+	SceneView getSceneView();
 	
 	MeshHandle createMesh(VulkanCommandBuffer& cmd, const MeshDesc& desc);
 	TextureHandle createTexture(VulkanCommandBuffer& cmd, const TextureDesc& desc);

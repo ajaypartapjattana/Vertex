@@ -4,7 +4,9 @@
 #include <vector>
 #include <functional>
 
+struct RenderPassDesc {
 
+};
 
 struct Pass {
 	std::string name;

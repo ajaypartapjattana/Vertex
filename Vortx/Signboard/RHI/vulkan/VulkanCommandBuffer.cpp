@@ -1,6 +1,7 @@
 #include "VulkanCommandBuffer.h"
 
 #include "Common/VulkanCommon.h"
+#include "VulkanSemaphore.h"
 
 #include "VulkanDevice.h"
 #include "VulkanCommandPool.h"
@@ -62,17 +63,27 @@ void VulkanCommandBuffer::end() {
 	}
 }
 
-void VulkanCommandBuffer::submitAndWait() {
+void VulkanCommandBuffer::submit(VulkanSemaphore& waitSemaphore, VulkanSemaphore& signalSemaphore) {
+	VkSemaphore wait_S = waitSemaphore.get();
+	VkSemaphore signal_S = signalSemaphore.get();
+
+	VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
 	VkSubmitInfo submitInfo{};
 	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 	submitInfo.commandBufferCount = 1;
 	submitInfo.pCommandBuffers = &commandBuffer;
+	
+	submitInfo.waitSemaphoreCount = 1;
+	submitInfo.pWaitSemaphores = &wait_S;
+	submitInfo.pWaitDstStageMask = &waitStage;
+
+	submitInfo.signalSemaphoreCount = 1;
+	submitInfo.pSignalSemaphores = &signal_S;
 
 	if (vkQueueSubmit(device.getGraphicsQueue(), 1, &submitInfo, fence) != VK_SUCCESS) {
 		throw std::runtime_error("failed to submit command buffer");
 	}
-
-	vkWaitForFences(device.getDevice(), 1, &fence, VK_TRUE, UINT64_MAX);
 }
 
 void VulkanCommandBuffer::bindVertexBuffer(const VulkanBuffer& buffer) {

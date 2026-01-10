@@ -160,6 +160,7 @@
     <ClCompile Include="Controllers\Utilities\vecMath.cpp" />
     <ClCompile Include="Signboard\RendererCore\RenderBackend\vulkan\VulkanRenderBackend.cpp" />
     <ClCompile Include="Signboard\RendererCore\RenderBackend\vulkan\VulkanRenderBackend.h" />
+    <ClCompile Include="Signboard\RendererCore\Renderer_core.cpp" />
     <ClCompile Include="Signboard\resources\ResourceAPI.cpp" />
     <ClCompile Include="Signboard\resources\resourceSystems\MaterialSystem.cpp" />
     <ClCompile Include="Signboard\resources\resourceSystems\MeshSystem.cpp" />
@@ -181,7 +182,7 @@
     <ClCompile Include="entityHandlers\model.cpp" />
     <ClCompile Include="entityHandlers\ModelManager.cpp" />
     <ClCompile Include="Signboard\resources\resourceSystems\primitive\Texture.cpp" />
-    <ClCompile Include="Signboard\RendererCore\Renderer_core.cpp" />
+    <ClCompile Include="Signboard\RendererCore\Renderer_core_d.cpp" />
     <ClCompile Include="Signboard\resources\resourceSystems\ResourceHash\RenderPassHash.h" />
     <ClCompile Include="Signboard\resources\scene\ViewStateSystem.cpp" />
     <ClCompile Include="Signboard\RHI\common\DeviceTypes.h" />
@@ -223,6 +224,7 @@
     <ClInclude Include="Controllers\SensorListner.h" />
     <ClInclude Include="core\resource.h" />
     <ClInclude Include="Signboard\RendererCore\RenderBackend\RenderBackend.h" />
+    <ClInclude Include="Signboard\RendererCore\Renderer.h" />
     <ClInclude Include="Signboard\RendererCore\RenderGraph\RenderGraph.h" />
     <ClInclude Include="Signboard\RendererCore\RenderGraph\RenderGraphTypes.h" />
     <ClInclude Include="Signboard\resources\DescriptorSchema.h" />
@@ -242,6 +244,7 @@
     <ClInclude Include="Signboard\RHI\common\ImageSamplerTypes.h" />
     <ClInclude Include="Signboard\RHI\common\ImageTypes.h" />
     <ClInclude Include="Signboard\RHI\common\RenderPassTypes.h" />
+    <ClInclude Include="Signboard\RHI\common\SwapchainTypes.h" />
     <ClInclude Include="Signboard\RHI\common\VertexTypes.h" />
     <ClInclude Include="Signboard\RHI\common\base\Flag_type.h" />
     <ClInclude Include="Signboard\resources\resourceSystems\ResourceHash\HashBase\Hash.h" />
@@ -254,6 +257,7 @@
     <ClInclude Include="Signboard\RHI\vulkan\TypeMap\VulkanPipelineTypeMap.h" />
     <ClInclude Include="renderSystem\RHI\vulkan\TypeMap\VulkanSampelrTypeMap.h" />
     <ClInclude Include="Signboard\RHI\vulkan\TypeMap\VulkanSamplerTypeMap.h" />
+    <ClInclude Include="Signboard\RHI\vulkan\TypeMap\VulkanSwapchainTypeMap.h" />
     <ClInclude Include="Signboard\RHI\vulkan\VulkanContext.h" />
     <ClInclude Include="Signboard\RHI\vulkan\Common\VulkanFwd.h" />
     <ClInclude Include="Signboard\RHI\vulkan\Common\VulkanCommon.h" />
@@ -261,7 +265,6 @@
     <ClInclude Include="Signboard\resources\scene\ObjectSystem.h" />
     <ClInclude Include="Signboard\RendererCore\RenderGraph\ForwardPass\ForwardPass.h" />
     <ClInclude Include="Signboard\RendererCore\RenderGraph\ForwardPass\batch.h" />
-    <ClInclude Include="Signboard\RendererCore\RenderGraph\PassRegistry.h" />
     <ClInclude Include="Signboard\RendererCore\RenderGraph\RenderPassBase.h" />
     <ClInclude Include="Signboard\RHI\vulkan\VulkanDescriptorLayout.h" />
     <ClInclude Include="Signboard\RHI\vulkan\VulkanDescriptorPool.h" />
@@ -299,7 +302,7 @@
     <ClInclude Include="Signboard\Signboard.h" />
     <ClInclude Include="Signboard\utility\VulkanUtils.h" />
     <ClInclude Include="Signboard\RendererCore\RenderGraph\common\pipelines.h" />
-    <ClInclude Include="Signboard\RendererCore\Renderer.h" />
+    <ClInclude Include="Signboard\RendererCore\Renderer_d.h" />
     <ClInclude Include="Signboard\resources\resourceSystems\SamplerSystem.h" />
     <ClInclude Include="Signboard\window\WindowEventProxy.h" />
     <ClInclude Include="Signboard\window\windowSurface.h" />

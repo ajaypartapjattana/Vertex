@@ -2,12 +2,18 @@
 
 #include "Signboard/RHI/vulkan/VulkanCommandBuffer.h"
 #include "Signboard/RHI/vulkan/VulkanImage.h"
+#include "Signboard/RHI/vulkan/VulkanSemaphore.h"
 
+#include "Signboard/RHI/VulkanRHI.h"
 #include "Signboard/resources/ResourceAPI.h"
+
+#include "RenderGraph/RenderGraph.h"
 
 #include <array>
 #include <vector>
 #include <memory>
+
+static constexpr uint32_t FRAMES_IN_FLIGHT = 2;
 
 struct RenderQueue {
 	std::vector<ObjectHandle> drawList;
@@ -15,73 +21,50 @@ struct RenderQueue {
 
 class VulkanDevice;
 
-class VulkanSwapchain;
 class VulkanFrameBuffer;
 class VulkanRenderPass;
 
-class RenderContext;
-class Scene;
-
 class Renderer {
 public:
-	explicit Renderer(VulkanDevice& device, ResourceView view);
+	explicit Renderer(RHIView& HInterface, ResourceView resources, SceneView& scene);
 	~Renderer();
 
-	//rendering logic ---
+	void beginFrame();
+	void submitScene(const SceneView& scene);
 	void renderFrame();
+	void endFrame();
+
 	void resize();
 
 private:
-	// --- EXTERNS ---
+	void buildGraph();
+	void drawScene(CommandList& cmd);
+	void drawUI(CommandList& cmd);
 
-	VulkanDevice& device;
-	RenderContext& renderContext;
-	Scene& scene;
+private:
+	RHIView HInterface;
+	ResourceView resources;
+	SceneView scene;
 
-	// --- FRAMESYNC ---
-	static constexpr uint32_t FRAMES_IN_FLIGHT = 2;
-	uint32_t frameIndex = 0;
+	RenderGraph graph;
+
+	uint32_t currentFrameIndex;
+	uint32_t acquiredImageIndex;
+
+	bool graphDirty = true;
+
+	FrameUnions frameData;
+	BufferHandle frameUniformBuffer;
+
+	pass forwardPass;
+	pass uiPass;
 
 	struct Frame {
-		uint32_t frameIndex;
 		VulkanCommandBuffer cmd;
-		VulkanImage swapchainImage;
-		ImageExtent2D extent;
+		VulkanSemaphore imageAvailable;
+		VulkanSemaphore renderFinished;
 	};
 
-	std::array<Frame, FRAMES_IN_FLIGHT> frames;
+	std::vector<Frame> frames;
 
-	
-	VkCommandPool commandPool;
-	VkQueue queue;
-
-private:
-	//FRAMEDRAW OBJECTS ---
-
-	static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
-	uint32_t currentFrame = 0;
-	bool framebufferResized = false;
-
-	std::vector<VkFramebuffer> swapChainFramebuffers;
-
-	VkRenderPass renderPass;
-	VulkanImage MSAAImage;
-	VulkanImage depthImage;
-
-	std::vector<VkFence> imagesInFlight;
-	uint32_t accquiredImageIndex;
-
-private:
-	//UTILITY ---
-
-	bool constructDrawList(); //
-	void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex); //
-
-	void createDepthResources();
-	void createMSAAResources();
-	void createFramebuffers();
-
-	void createRenderPass();
-
-	void createFrameContext();
-};
+}

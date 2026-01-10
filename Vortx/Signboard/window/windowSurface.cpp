@@ -9,7 +9,7 @@ WindowSurface::WindowSurface(
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
     window = glfwCreateWindow(info.width, info.height, info.title, nullptr, nullptr);
-    glfwMakeContextCurrent(window);
+    //glfwMakeContextCurrent(window);
 }
 
 WindowSurface::~WindowSurface() 

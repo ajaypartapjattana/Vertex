@@ -10,3 +10,15 @@ VulkanRHI::VulkanRHI(GLFWwindow* window)
 {
 	
 }
+
+VulkanRHI::~VulkanRHI() {
+	device.waitIdle();
+}
+
+RHIView VulkanRHI::getRHIView() {
+	return RHIView{
+		device,
+		swapchain,
+		graphicsCommandPool
+	};
+}

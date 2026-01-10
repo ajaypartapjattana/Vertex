@@ -2,12 +2,16 @@
 
 #include "RenderGraphTypes.h"
 
+class VulkanCommandBuffer;
+
 class RenderGraph {
 public:
 	RenderGraph() = default;
-	
-	ImageHandle createImage(const ImageDesc& desc);
-	BufferHandle createBuffer(const BufferDesc& desc);
 
-	Pass& addPass(const std::string& name);
+	Pass& addPass(const RenderPassDesc&);
+
+	void compile();
+	void execute(VulkanCommandBuffer& cmd);
+	void reset();
+
 };

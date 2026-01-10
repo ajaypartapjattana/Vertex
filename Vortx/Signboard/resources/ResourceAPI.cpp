@@ -113,9 +113,6 @@ MeshHandle ResourceAPI::createMesh(VulkanCommandBuffer& cmd, const MeshDesc& des
 
 ResourceView ResourceAPI::getResourceView() {
 	return ResourceView{ 
-		objectSystem, 
-		viewStateSystem, 
-
 		pipelineSystem, 
 		materialSystem, 
 		textureSystem, 
@@ -123,3 +120,11 @@ ResourceView ResourceAPI::getResourceView() {
 		meshSystem 
 	};
 }
+
+SceneView ResourceAPI::getSceneView() {
+	return SceneView{
+		objectSystem,
+		viewStateSystem,
+	};
+}
+

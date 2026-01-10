@@ -133,3 +133,7 @@ uint32_t VulkanDevice::findMemoryType(uint32_t typeFilter, MemoryPropertyFlags p
 	}
 	throw std::runtime_error("failed to find suitable memory type!");
 }
+
+void VulkanDevice::waitIdle() {
+	vkDeviceWaitIdle(device);
+}
