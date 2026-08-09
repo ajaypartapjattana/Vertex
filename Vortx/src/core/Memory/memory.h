@@ -16,19 +16,25 @@ namespace mem {
 	constexpr size_t alignUp(size_t _Offset, size_t _Align) noexcept {
 		return (_Offset + _Align - 1) & ~(_Align - 1);
 	}
+	template <typename _Ty>
+	constexpr _Ty* alignUp(const void* _Addr) noexcept {
+		return reinterpret_cast<_Ty*>((reinterpret_cast<uintptr_t>(_Addr) + alignof(_Ty) - 1) & ~(alignof(_Ty) - 1));
+	}
+	template <typename _Ty>
+	constexpr _Ty* alignUp(const void* _Addr, size_t _Align) noexcept {
+		return reinterpret_cast<_Ty*>((reinterpret_cast<uintptr_t>(_Addr) + _Align - 1) & ~(_Align - 1));
+	}
 
 	constexpr size_t alignDown(size_t _Offset, size_t _Align) noexcept {
 		return _Offset & ~(_Align - 1);
 	}
-
-	template <typename T>
-	constexpr T* alignUp(T* _Addr, size_t _Align) noexcept {
-		return reinterpret_cast<T*>((reinterpret_cast<size_t>(_Addr) + _Align - 1) & ~(_Align - 1));
+	template <typename _Ty>
+	constexpr _Ty* alignDown(const void* _Addr) noexcept {
+		return reinterpret_cast<_Ty*>(reinterpret_cast<uintptr_t>(_Addr) & ~(alignof(_Ty) - 1));
 	}
-
-	template <typename T>
-	constexpr T* alignDown(T* _Addr, size_t _Align) noexcept {
-		return reinterpret_cast<T*>(reinterpret_cast<size_t>(_Addr) & ~(_Align - 1));
+	template <typename _Ty>
+	constexpr _Ty* alignDown(const void* _Addr, size_t _Align) noexcept {
+		return reinterpret_cast<_Ty*>(reinterpret_cast<uintptr_t>(_Addr) & ~(_Align - 1));
 	}
 
 	template <typename _Ty = uint8_t>
@@ -50,6 +56,12 @@ namespace mem {
 			pEnd(_pBegin + _Count)
 		{
 
+		}
+
+		void copy(const span<_Ty>& _Other) noexcept {
+			assert(_Other.size() == size());
+
+			memcpy(pBegin, _Other.pBegin, size() * sizeof(_Ty));
 		}
 
 		_Ty& operator[](size_t _Index) noexcept {
@@ -310,7 +322,7 @@ namespace mem {
 		void* decommit(void* _Hint, size_t* pSize) const noexcept {
 			assert(_Hint && pSize);
 
-			uint8_t* pBase = alignDown<uint8_t>(reinterpret_cast<uint8_t*>(_Hint), memInfo.pageSize);
+			uint8_t* pBase = alignDown<uint8_t>(_Hint, memInfo.pageSize);
 			uint8_t* pEnd = alignUp<uint8_t>(reinterpret_cast<uint8_t*>(_Hint) + *pSize, memInfo.pageSize);
 
 			const size_t releaseSize = static_cast<size_t>(pEnd - pBase);
@@ -334,6 +346,14 @@ namespace mem {
 			VirtualFree(pAlloc, 0, MEM_RELEASE);
 		}
 
+	};
+
+	struct marker {
+		uint8_t* mark = nullptr;
+
+		bool marked() const noexcept {
+			return mark;
+		}
 	};
 
 	class stack : memBase {
@@ -475,18 +495,18 @@ namespace mem {
 			pMark = nullptr;
 		}
 
-		bool mark() noexcept {
+		marker mark() noexcept {
 			if (!pBase) {
 				try {
 					resize(0);
 				}
 				catch (const std::exception& _Except) {
-					return false;
+					return { nullptr };
 				}
 			}
 
 			if (pCurrent == pBase)
-				return true;
+				return { pBase };
 
 			const size_t markerOffset = pMark ? static_cast<size_t>(pMark - pBase) : 0;
 
@@ -497,7 +517,7 @@ namespace mem {
 				ensure(pLast);
 			}
 			catch (const std::exception& _Except) {
-				return false;
+				return { nullptr };
 			}
 
 			memcpy(pAligned, &markerOffset, sizeof(Marker));
@@ -505,11 +525,13 @@ namespace mem {
 			pMark = pAligned;
 			pCurrent = pLast;
 
-			return true;
+			return { pAligned };
 		}
 
-		void restore() noexcept {
+		void restore(marker _Marker = {}) noexcept {
 			assert(pCurrent != pBase);
+
+			pMark = _Marker.mark ? _Marker.mark : pMark;
 
 			if (!pMark) {
 				pCurrent = pBase;
@@ -816,6 +838,6 @@ namespace mem {
 
 	};
 
-	thread_local static stack scratch;
+	inline thread_local stack scratch{16 << 20};
 
 }

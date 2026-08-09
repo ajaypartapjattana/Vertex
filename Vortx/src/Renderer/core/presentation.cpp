@@ -36,12 +36,7 @@ namespace rndr {
 			std::vector<VkSurfaceFormatKHR> supportedFormats(supportedFormatCount);
 			vkGetPhysicalDeviceSurfaceFormatsKHR(_PhysicalDevice, _Surface, &supportedFormatCount, supportedFormats.data());
 
-			constexpr std::array preferredSurfaceFormats {
-				VkSurfaceFormatKHR{ VK_FORMAT_B8G8R8A8_SRGB, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR },
-				VkSurfaceFormatKHR{ VK_FORMAT_R8G8B8A8_SRGB, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR },
-				VkSurfaceFormatKHR{ VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR },
-				VkSurfaceFormatKHR{ VK_FORMAT_R8G8B8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR }
-			};
+			
 
 			size_t index = 0;
 			std::findEarly_basic<VkSurfaceFormatKHR, SurfaceFormatEq>(preferredSurfaceFormats.data(), preferredSurfaceFormats.size(), supportedFormats.data(), supportedFormats.size(), &index);
@@ -538,60 +533,60 @@ namespace rndr {
 		return result;
 	}
 
-	VkResult PresentationStage::targetSurface(VkSurfaceKHR _Surface, size_t* const pIndex) noexcept {
-		assert(_Surface && pIndex);
+	//	VkResult PresentationStage::targetSurface(VkSurfaceKHR _Surface, size_t* const pIndex) noexcept {
+	//	assert(_Surface && pIndex);
 
-		VkResult result;
+	//	VkResult result;
 
-		{
-			VkBool32 surfaceSupport;
-			result = vkGetPhysicalDeviceSurfaceSupportKHR(r_physicalDevice, execution.presentFamily, _Surface, &surfaceSupport);
-			if (result != VK_SUCCESS)
-				return result;
-				
-			if (!surfaceSupport)
-				return VK_ERROR_NOT_PERMITTED;
-		}
+	//	{
+	//		VkBool32 surfaceSupport;
+	//		result = vkGetPhysicalDeviceSurfaceSupportKHR(r_physicalDevice, execution.presentFamily, _Surface, &surfaceSupport);
+	//		if (result != VK_SUCCESS)
+	//			return result;
+	//			
+	//		if (!surfaceSupport)
+	//			return VK_ERROR_NOT_PERMITTED;
+	//	}
 
-		{
-			uint32_t supportedFormatCount = 0;
-			result = vkGetPhysicalDeviceSurfaceFormatsKHR(r_physicalDevice, _Surface, &supportedFormatCount, nullptr);
-			if (result != VK_SUCCESS)
-				return result;
+	//	{
+	//		uint32_t supportedFormatCount = 0;
+	//		result = vkGetPhysicalDeviceSurfaceFormatsKHR(r_physicalDevice, _Surface, &supportedFormatCount, nullptr);
+	//		if (result != VK_SUCCESS)
+	//			return result;
 
-			std::vector<VkSurfaceFormatKHR> supportedFormats(supportedFormatCount);
-			vkGetPhysicalDeviceSurfaceFormatsKHR(r_physicalDevice, _Surface, &supportedFormatCount, supportedFormats.data());
+	//		std::vector<VkSurfaceFormatKHR> supportedFormats(supportedFormatCount);
+	//		vkGetPhysicalDeviceSurfaceFormatsKHR(r_physicalDevice, _Surface, &supportedFormatCount, supportedFormats.data());
 
-			bool support = std::contain<VkSurfaceFormatKHR, SurfaceFormatEq>(surfaceFormat, supportedFormats.data(), supportedFormats.size());
-			if (!support)
-				return VK_ERROR_FORMAT_NOT_SUPPORTED;
-		}
-		
-		VkPresentModeKHR surfacePresentMode = VK_PRESENT_MODE_FIFO_KHR;
+	//		bool support = std::contain<VkSurfaceFormatKHR, SurfaceFormatEq>(surfaceFormat, supportedFormats.data(), supportedFormats.size());
+	//		if (!support)
+	//			return VK_ERROR_FORMAT_NOT_SUPPORTED;
+	//	}
+	//	
+	//	VkPresentModeKHR surfacePresentMode = VK_PRESENT_MODE_FIFO_KHR;
 
-		{
-			uint32_t supportedPresentModeCount = 0;
-			result = vkGetPhysicalDeviceSurfacePresentModesKHR(r_physicalDevice, _Surface, &supportedPresentModeCount, nullptr);
-			if (result != VK_SUCCESS)
-				return result;
+	//	{
+	//		uint32_t supportedPresentModeCount = 0;
+	//		result = vkGetPhysicalDeviceSurfacePresentModesKHR(r_physicalDevice, _Surface, &supportedPresentModeCount, nullptr);
+	//		if (result != VK_SUCCESS)
+	//			return result;
 
-			std::vector<VkPresentModeKHR> supportedPresentModes(supportedPresentModeCount);
-			vkGetPhysicalDeviceSurfacePresentModesKHR(r_physicalDevice, _Surface, &supportedPresentModeCount, supportedPresentModes.data());
+	//		std::vector<VkPresentModeKHR> supportedPresentModes(supportedPresentModeCount);
+	//		vkGetPhysicalDeviceSurfacePresentModesKHR(r_physicalDevice, _Surface, &supportedPresentModeCount, supportedPresentModes.data());
 
-			if (std::contain(VK_PRESENT_MODE_MAILBOX_KHR, supportedPresentModes.data(), supportedPresentModes.size())) {
-				surfacePresentMode = VK_PRESENT_MODE_MAILBOX_KHR;
-			}
-		}
+	//		if (std::contain(VK_PRESENT_MODE_MAILBOX_KHR, supportedPresentModes.data(), supportedPresentModes.size())) {
+	//			surfacePresentMode = VK_PRESENT_MODE_MAILBOX_KHR;
+	//		}
+	//	}
 
-		*pIndex = presentationTargets.size();
+	//	*pIndex = presentationTargets.size();
 
-		PresentationTarget& target = presentationTargets.emplace_back();
+	//	PresentationTarget& target = presentationTargets.emplace_back();
 
-		target.surface = _Surface;
-		target.presentMode = surfacePresentMode;
+	//	target.surface = _Surface;
+	//	target.presentMode = surfacePresentMode;
 
-		return VK_SUCCESS;
-	}
+	//	return VK_SUCCESS;
+	//}
 
 	void PresentationStage::releaseSurface(size_t index, VkSurfaceKHR* pSurface) noexcept {
 		if (!pSurface)

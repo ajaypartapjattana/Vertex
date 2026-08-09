@@ -7,6 +7,40 @@
 #include <iostream>
 
 int main() {
+    
+    {
+        size_t fileSize = 0;
+        int error = io::loadBinary(L"assets_data/textures/seaside.png", &fileSize, nullptr);
+
+        if (error)
+            return EXIT_FAILURE;
+
+        mem::scratch.mark();
+        mem::span<uint8_t> imageBin = mem::scratch.alloc<uint8_t>(fileSize);
+
+        error = io::loadBinary(L"assets_data/textures/seaside.png", &fileSize, imageBin);
+
+        if (error)
+            return EXIT_FAILURE;
+
+        io::ImageInfo imageInfo;
+        error = io::fetchPngInfo(imageBin, fileSize, &imageInfo);
+
+        if (error)
+            return EXIT_FAILURE;
+
+        const size_t imageSize = (((size_t)imageInfo.bitDepth * imageInfo.channels * imageInfo.width) >> 3) * imageInfo.height;
+        mem::span<uint8_t> image = mem::scratch.alloc<uint8_t>(imageSize);
+
+        error = io::decodePng(image, &imageInfo, imageBin, fileSize);
+
+        if (error)
+            return EXIT_FAILURE;
+    }
+    
+
+    return EXIT_SUCCESS;
+
     Platform platform;
 
     platform.createWindowClass();
@@ -23,11 +57,10 @@ int main() {
 
     Renderer renderer;
 
-    try {
-        renderer.deploy();
-    }
-    catch (const std::exception& e) {
-        std::cerr << e.what() << std::endl;
+    int error = renderer.deploy();
+    
+    if (error) {
+        std::cerr << "FAILED to deploy renderer!" << std::endl;
     }
 
     HINSTANCE instance = platform.getInstance();
@@ -56,18 +89,6 @@ int main() {
             std::cerr << e.what() << std::endl;
         }
     }
-
-    renderer.pushRenderTarget(instance, window);
-
-    io::ImageFile image;
-    io::Result result = image.loadPNGw(L"assets_data/textures/seaside.png");
-
-    if (result != io::Result::SUCCESS) {
-        std::cerr << "Failed to load PNG image." << std::endl;
-        return EXIT_FAILURE;
-    }
-    
-	renderer.createImage(image.data(), image.size(), image.width, image.height);
 
     while (platform.pollEvents()) {
 

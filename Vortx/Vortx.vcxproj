@@ -203,14 +203,13 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="external\VMA\vma.cpp" />
-    <ClCompile Include="src\assets\io\pngDecode.cpp" />
+    <ClCompile Include="src\assets\io\binary.cpp" />
+    <ClCompile Include="src\assets\io\png.cpp" />
     <ClCompile Include="src\assets\Utility\convStr.cpp" />
     <ClCompile Include="src\core\Logging\logger.cpp" />
     <ClCompile Include="src\core\Threading\threadPool.cpp" />
     <ClCompile Include="src\core\Time\Time.cpp" />
     <ClCompile Include="src\Platform\platform.cpp" />
-    <ClCompile Include="src\Renderer\core\presentation.cpp" />
-    <ClCompile Include="src\Renderer\Mesh\mesher.cpp" />
     <ClCompile Include="src\Renderer\core\transfer.cpp" />
     <ClCompile Include="src\Renderer\renderer.cpp" />
     <ClCompile Include="main.cpp" />
@@ -219,7 +218,6 @@
     <ClInclude Include="src\core\core.h" />
     <ClInclude Include="src\core\Logging\logger.h" />
     <ClInclude Include="src\core\Logging\quickLog.h" />
-    <ClInclude Include="src\core\Math\search.h" />
     <ClInclude Include="src\core\Memory\memory.h" />
     <ClInclude Include="src\core\Threading\threadPool.h" />
     <ClInclude Include="src\core\Threading\threads.h" />
@@ -242,9 +240,7 @@
     <ClInclude Include="src\assets\Utility\convStr.h" />
     <ClInclude Include="src\Platform\platform.h" />
     <ClInclude Include="src\core\Interfaces\renderer\mesh\mesh.h" />
-    <ClInclude Include="src\Renderer\core\presentation.h" />
     <ClInclude Include="src\Renderer\core\renderer_core.h" />
-    <ClInclude Include="src\Renderer\Mesh\mesher.h" />
     <ClInclude Include="src\Renderer\primitive\rndr_primitive.h" />
     <ClInclude Include="src\Renderer\core\transfer.h" />
     <ClInclude Include="src\Renderer\renderer.h" />

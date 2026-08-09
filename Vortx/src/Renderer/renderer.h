@@ -14,22 +14,24 @@ class Renderer {
 private:
 	mem::stack stash;
 
-	VkInstance instance = VK_NULL_HANDLE;
+	VkInstance instance;
 
 	struct PhysicalDevice {
 		VkPhysicalDeviceProperties properties{};
 		VkPhysicalDeviceMemoryProperties memory{};
 		VkPhysicalDeviceFeatures features{};
 
-		VkPhysicalDevice handle = VK_NULL_HANDLE;
+		VkPhysicalDevice handle;
 	};
 
 	mem::span<PhysicalDevice> physicalDevices;
 	PhysicalDevice* physicalDevice;
 
-	VkSurfaceKHR surface = VK_NULL_HANDLE;
+	mem::marker deployBase;
 
-	VkDevice device = VK_NULL_HANDLE;
+	VkSurfaceKHR surface;
+
+	VkDevice device;
 
 	struct QueueFamilyIndices {
 		uint32_t graphics;
@@ -43,32 +45,61 @@ private:
 		VkQueue present;
 	} deviceQueue;
 
-	VmaAllocator allocator = VK_NULL_HANDLE;
+	VkCommandPool graphicsCommandPool;
+	VkCommandPool transferCommandPool;
 
-	VkBuffer stagingBuffer = VK_NULL_HANDLE;
+	VmaAllocator allocator;
+
+	VkBuffer stagingBuffer;
 	VmaAllocation stagingAllocation;
 	rndr::TransferStage transferStage;
 
+	VkSwapchainKHR swapchain;
+	VkSurfaceFormatKHR surfaceFormat;
+	VkPresentModeKHR presentMode;
+	mem::span<VkImage> swapchainImage;
+	mem::span<VkImageView> swapchainImageView;
 
+	struct RenderPasses {
+		VkRenderPass composite = VK_NULL_HANDLE;
+	} renderPass;
 
-	rndr::PresentationStage presentationStage;
+	struct Samplers {
+		VkSampler raw = VK_NULL_HANDLE;
+	} sampler;
 
+	struct DescriptorSetlayouts {
+		VkDescriptorSetLayout imageRead = VK_NULL_HANDLE;
+	} descriptorSetLayout;
 
-	std::vector<size_t> renderTargets;
+	struct PipelineLayouts {
+		VkPipelineLayout composite = VK_NULL_HANDLE;
+	} pipelineLayout;
 
-	std::vector<VkImage> images;
-	std::vector<VkImageView> presentationPool;
+	struct Pipelines {
+		VkPipeline composite = VK_NULL_HANDLE;
+	} pipeline;
+
+	VkDescriptorPool descriptorPool;
+	VkDescriptorSet descriptorSet;
+
+	VkSemaphore imageAvailableSemaphore;
+	VkSemaphore transferCompleteSemaphore;
+	
+	VkFence fence;
+
+	mem::marker deviceBase;
 
 public:
 	Renderer() noexcept = default;
 	~Renderer() noexcept;
 
-	std::error_code deploy() noexcept;
+	int deploy() noexcept;
 
-	void enumeratePhysicalDeviceNames(size_t* count, const char** const deviceNames) noexcept;
-	std::error_code createDevice(HINSTANCE hinstance, HWND hwnd, size_t physicalDeviceIndex);
+	void enumeratePhysicalDeviceNames(size_t* pCount, const char** const pDeviceName) noexcept;
+	int createDevice(HINSTANCE hinstance, HWND hwnd, size_t physicalDeviceIndex);
 
-	int pushRenderTarget(HINSTANCE hinstance, HWND hwnd) noexcept;
+	int sustainImage(const void* const pData, size_t _Size, uint32_t _Width, uint32_t _Height) noexcept;
 
 	int createImage(const void* const pData, size_t _Size, uint32_t _Width, uint32_t _Height) noexcept;
 

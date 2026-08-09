@@ -17,7 +17,7 @@ namespace rndr {
 		VkDevice r_device = VK_NULL_HANDLE;
 		VkPhysicalDevice r_physicalDevice = VK_NULL_HANDLE;
 
-		VkSurfaceFormatKHR surfaceFormat{};
+		VkSurfaceFormatKHR surfaceFormat;
 
 		VkRenderPass compositionPass = VK_NULL_HANDLE;
 

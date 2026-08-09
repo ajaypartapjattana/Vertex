@@ -88,10 +88,10 @@ namespace rndr {
 			*pOffset += chunk.size;
 
 			return 1;
-
-		default:
 			
 		}
+
+		return -1;
 	}
 
 	int TransferStage::streamImageUpload(const DataSource* const pSource, const TransferImageAttributes* const pImageInfo, VkOffset3D* const pOffset, VkBufferImageCopy* const pRegion) noexcept {
@@ -208,10 +208,10 @@ namespace rndr {
 
 			return 1;
 
-		default:
-			
 
 		}
+
+		return -1;
 	}
 
 }

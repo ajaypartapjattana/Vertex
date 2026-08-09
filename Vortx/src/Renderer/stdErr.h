@@ -60,7 +60,7 @@ _NODISCARD inline std::error_code make_error_code(RCode e) {
 namespace std {
 
 	template <>
-	struct is_error_code_enum<rndr::RCode> : std::true_type {};
+	struct is_error_code_enum<RCode> : std::true_type {};
 
 }
 
