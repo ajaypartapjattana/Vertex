@@ -1,0 +1,5 @@
+{
+    "cmake.sourceDirectory": "/home/ajaypartapjattana/Documents/Repos/Signboard",
+    "C_Cpp.default.compileCommands": "${workspaceFolder}/build/debug-gcc/compile_commands.json",
+    "cmake.useCMakePresets": "always"
+}

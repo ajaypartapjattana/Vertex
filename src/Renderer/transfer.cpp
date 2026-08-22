@@ -178,12 +178,12 @@ namespace rndr {
 			case 0:
 				pOffset->x += transferExtent.width;
 				
-				if (pOffset->x == pImageInfo->extent.width) {
+				if ((uint32_t)pOffset->x == pImageInfo->extent.width) {
 					pOffset->x = 0;
 					pOffset->y++;
 				}
 
-				if (pOffset->y == pImageInfo->extent.height) {
+				if ((uint32_t)pOffset->y == pImageInfo->extent.height) {
 					pOffset->y = 0;
 					pOffset->z++;
 				}
@@ -192,7 +192,7 @@ namespace rndr {
 
 			case 1:
 				pOffset->y += transferExtent.height;
-				if (pOffset->y == pImageInfo->extent.height) {
+				if ((uint32_t)pOffset->y == pImageInfo->extent.height) {
 					pOffset->y = 0;
 					pOffset->z++;
 				}

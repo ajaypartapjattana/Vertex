@@ -1,0 +1,121 @@
+{
+    "version": 6,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 28,
+        "patch": 0
+    },
+
+    "configurePresets": [
+        {
+            "name": "debug-gcc",
+            "displayName": "Debug - GCC",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/debug-gcc",
+
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_C_COMPILER": "gcc",
+                "CMAKE_CXX_COMPILER": "g++"
+            }
+        },
+
+        {
+            "name": "relwithdebinfo-gcc",
+            "displayName": "RelWithDebInfo - GCC",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/relwithdebinfo-gcc",
+            
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "CMAKE_C_COMPILER": "gcc",
+                "CMAKE_CXX_COMPILER": "g++"
+            }
+        },
+
+        {
+            "name": "release-gcc",
+            "displayName": "Release - GCC",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/release-gcc",
+            
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_C_COMPILER": "gcc",
+                "CMAKE_CXX_COMPILER": "g++"
+            }
+        },
+
+        {
+            "name": "debug-clang",
+            "displayName": "Debug - Clang",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/debug-clang",
+
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++"
+            }
+        },
+
+        {
+            "name": "relwithdebinfo-clang",
+            "displayName": "RelWithDebInfo - Clang",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/relwithdebinfo-clang",
+
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "CMAKE_C_COMPILER": "gcc",
+                "CMAKE_CXX_COMPILER": "g++"
+            }
+        },
+
+        {
+            "name": "release-clang",
+            "displayName": "Release - Clang",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/release-clang",
+            
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++"
+            }
+        }
+    ],
+
+    "buildPresets": [
+        {
+            "name": "debug-gcc",
+            "configurePreset": "debug-gcc"
+        },
+
+        {
+            "name": "relwithdebinfo-gcc",
+            "configurePreset": "relwithdebinfo-gcc"
+        },
+
+        {
+            "name": "release-gcc",
+            "configurePreset": "release-gcc"
+        },
+
+        {
+            "name": "debug-clang",
+            "configurePreset": "debug-clang"
+        },
+
+        {
+            "name": "relwithdebinfo-clang",
+            "configurePreset": "relwithdebinfo-clang"
+        },
+
+        {
+            "name": "release-clang",
+            "configurePreset": "release-clang"
+        }
+    ]
+}
+

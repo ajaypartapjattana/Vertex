@@ -1,0 +1,15 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug-gcc Vortx",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceRoot}/build/debug-gcc/Vortx",
+            "cwd": "${workspaceFolder}",
+            "stopAtEntry": false,
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb"
+        }
+    ]
+}

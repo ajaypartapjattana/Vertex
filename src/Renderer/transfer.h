@@ -1,12 +1,12 @@
 #pragma once
 
-#include "src/Core/Memory/memory.h"
-
-#include <vulkan/vulkan.h>
-#include <vma/vk_mem_alloc.h>
-#include <vector>
 #include <utility>
 #include <cstddef>
+
+#include <vulkan/vulkan.h>
+
+#include <vk_mem_alloc.h>
+#include <core/Memory/memory.h>
 
 namespace rndr {
 
@@ -30,8 +30,8 @@ namespace rndr {
 	private:
 		mem::span<uint8_t> stageSpan;
 
-		uint8_t* pAllocTail = nullptr;
 		uint8_t* pAllocBase = nullptr;
+		uint8_t* pAllocTail = nullptr;
 		uint8_t* pAllocHead = nullptr;
 
 		struct {

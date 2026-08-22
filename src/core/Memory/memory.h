@@ -1,8 +1,15 @@
 #pragma once
 
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-#include <Windows.h>
+#if defined(PLATFORM_WINDOWS)
+  #define WIN32_LEAN_AND_MEAN
+  #define NOMINMAX
+  #include <Windows.h>
+#elif defined(PLATFORM_LINUX)
+  #include <unistd.h>
+  #include <sys/mman.h>
+#else
+  #error "Unsupported platform"
+#endif
 
 #include <cstring>
 #include <cstdint>
@@ -13,31 +20,7 @@
 
 namespace mem {
 
-	constexpr size_t alignUp(size_t _Offset, size_t _Align) noexcept {
-		return (_Offset + _Align - 1) & ~(_Align - 1);
-	}
 	template <typename _Ty>
-	constexpr _Ty* alignUp(const void* _Addr) noexcept {
-		return reinterpret_cast<_Ty*>((reinterpret_cast<uintptr_t>(_Addr) + alignof(_Ty) - 1) & ~(alignof(_Ty) - 1));
-	}
-	template <typename _Ty>
-	constexpr _Ty* alignUp(const void* _Addr, size_t _Align) noexcept {
-		return reinterpret_cast<_Ty*>((reinterpret_cast<uintptr_t>(_Addr) + _Align - 1) & ~(_Align - 1));
-	}
-
-	constexpr size_t alignDown(size_t _Offset, size_t _Align) noexcept {
-		return _Offset & ~(_Align - 1);
-	}
-	template <typename _Ty>
-	constexpr _Ty* alignDown(const void* _Addr) noexcept {
-		return reinterpret_cast<_Ty*>(reinterpret_cast<uintptr_t>(_Addr) & ~(alignof(_Ty) - 1));
-	}
-	template <typename _Ty>
-	constexpr _Ty* alignDown(const void* _Addr, size_t _Align) noexcept {
-		return reinterpret_cast<_Ty*>(reinterpret_cast<uintptr_t>(_Addr) & ~(_Align - 1));
-	}
-
-	template <typename _Ty = uint8_t>
 	struct span {
 		_Ty* pBegin = nullptr;
 		_Ty* pEnd = nullptr;
@@ -138,7 +121,7 @@ namespace mem {
 			return pEnd == _Other.pBegin || pBegin == _Other.pEnd;
 		}
 
-		_NODISCARD span slice(size_t _Size) noexcept {
+		span slice(size_t _Size) noexcept {
 			_Ty* _pSliceEnd = pBegin + _Size;
 			_pSliceEnd = _pSliceEnd < pEnd ? _pSliceEnd : pEnd;
 
@@ -248,7 +231,7 @@ namespace mem {
 
 		template <class... Args>
 		_Ty* emplace_back(Args&&... args) noexcept {
-			assert(pCurrent != pEnd);
+			assert(pCurrent != storage.pEnd);
 			::new (pCurrent) _Ty(std::forward<Args>(args)...);
 
 			return pCurrent++;
@@ -264,22 +247,57 @@ namespace mem {
 
 	};
 
-	class memBase {
+	constexpr size_t alignUp(size_t _Offset, size_t _Align) noexcept {
+		return (_Offset + _Align - 1) & ~(_Align - 1);
+	}
+	template <typename _Ty>
+	constexpr _Ty* alignUp(const void* _Addr) noexcept {
+		return reinterpret_cast<_Ty*>((reinterpret_cast<uintptr_t>(_Addr) + alignof(_Ty) - 1) & ~(alignof(_Ty) - 1));
+	}
+	template <typename _Ty>
+	constexpr _Ty* alignUp(const void* _Addr, size_t _Align) noexcept {
+		return reinterpret_cast<_Ty*>((reinterpret_cast<uintptr_t>(_Addr) + _Align - 1) & ~(_Align - 1));
+	}
+
+	constexpr size_t alignDown(size_t _Offset, size_t _Align) noexcept {
+		return _Offset & ~(_Align - 1);
+	}
+	template <typename _Ty>
+	constexpr _Ty* alignDown(const void* _Addr) noexcept {
+		return reinterpret_cast<_Ty*>(reinterpret_cast<uintptr_t>(_Addr) & ~(alignof(_Ty) - 1));
+	}
+	template <typename _Ty>
+	constexpr _Ty* alignDown(const void* _Addr, size_t _Align) noexcept {
+		return reinterpret_cast<_Ty*>(reinterpret_cast<uintptr_t>(_Addr) & ~(_Align - 1));
+	}
+
+	class virtualBlock {
 	protected:
 		struct SystemMemoryInfo {
 			size_t pageSize;
 			size_t allocationGranularity;
 		};
 
+	#if defined(PLATFORM_WINDOWS)
 		inline static const SystemMemoryInfo memInfo = [] {
 			SYSTEM_INFO info;
 			GetSystemInfo(&info);
 			
 			return SystemMemoryInfo{
-				(size_t)info.dwPageSize,
-				(size_t)info.dwAllocationGranularity
+				static_cast<size_t>(info.dwPageSize),
+				static_cast<size_t(info.dwAllocationGranularity)
 			};
 		}();
+	#elif defined(PLATFORM_LINUX)
+		inline static const SystemMemoryInfo memInfo = [] {
+			const size_t pageSize = static_cast<size_t>(sysconf(_SC_PAGESIZE));
+
+			return SystemMemoryInfo{
+				pageSize,
+				pageSize
+			};
+		}();
+	#endif
 
 		void* reserve(void* _AllocHint, size_t* pCapacity) const noexcept {
 			assert(pCapacity);
@@ -287,17 +305,20 @@ namespace mem {
 			size_t allocSize = *pCapacity;
 			allocSize = allocSize ? alignUp(allocSize, memInfo.allocationGranularity) : memInfo.allocationGranularity;
 
+		#if defined(PLATFORM_WINDOWS)
 			void* const pAlloc = VirtualAlloc(_AllocHint, allocSize, MEM_RESERVE, PAGE_READWRITE);
+		#elif defined(PLATFORM_LINUX)
+			void* const _pAlloc = mmap(_AllocHint, allocSize, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+			void* const pAlloc = _pAlloc != MAP_FAILED ? _pAlloc : nullptr;
+		#endif
 
-			if (pAlloc) {
-				*pCapacity = allocSize;
-
-				return pAlloc;
+			if (!pAlloc) {
+				*pCapacity = 0ull;
+				return nullptr;
 			}
 
-			*pCapacity = 0ull;
-
-			return nullptr;
+			*pCapacity = allocSize;
+			return pAlloc;
 		}
 
 		void* commit(void* _Hint, size_t* pSize) const noexcept {
@@ -306,17 +327,20 @@ namespace mem {
 			size_t allocSize = *pSize;
 			allocSize = allocSize ? alignUp(allocSize, memInfo.pageSize) : memInfo.pageSize;
 
+		#if defined(PLATFORM_WINDOWS)
 			void* const pAlloc = VirtualAlloc(_Hint, allocSize, MEM_COMMIT, PAGE_READWRITE);
+		#elif defined(PLATFORM_LINUX)
+			int result = mprotect(_Hint, allocSize, PROT_READ | PROT_WRITE);
+			void* const pAlloc = result == 0 ? _Hint : nullptr;
+		#endif
 
-			if (pAlloc) {
-				*pSize = allocSize;
-
-				return pAlloc;
+			if (!pAlloc) {
+				*pSize = 0ull;
+				return nullptr;
 			}
 
-			*pSize = 0ull;
-
-			return nullptr;
+			*pSize = allocSize;
+			return pAlloc;
 		}
 
 		void* decommit(void* _Hint, size_t* pSize) const noexcept {
@@ -327,23 +351,31 @@ namespace mem {
 
 			const size_t releaseSize = static_cast<size_t>(pEnd - pBase);
 
-			BOOL result = VirtualFree((void*)pBase, releaseSize, MEM_DECOMMIT);
+			bool success = false;
 
-			if (result) {
-				*pSize = releaseSize;
-
-				return _Hint;
+		#if defined(PLATFORM_WINDOWS)
+			success = VirtualFree((void*)pBase, releaseSize, MEM_DECOMMIT) != FALSE;
+		#elif defined(PLATFORM_LINUX)
+			success = madvise((void*)pBase, releaseSize, MADV_DONTNEED) == 0;
+		#endif
+			if (!success) {
+				*pSize = 0;
+				return nullptr;
 			}
 
-			*pSize = 0;
-
-			return nullptr;
+			*pSize = releaseSize;
+			return _Hint;
 		}
 
-		void free(void* const pAlloc) const noexcept {
+		void free(void* const pAlloc, size_t _Size) const noexcept {
 			assert(pAlloc);
 
+		#if defined(PLATFORM_WINDOWS)
 			VirtualFree(pAlloc, 0, MEM_RELEASE);
+		#elif defined(PLATFORM_LINUX)
+			_Size = alignUp(_Size, memInfo.allocationGranularity);
+			munmap(pAlloc, _Size);
+		#endif
 		}
 
 	};
@@ -356,17 +388,17 @@ namespace mem {
 		}
 	};
 
-	class stack : memBase {
+	class stack : virtualBlock {
 	private:
 		uint8_t* pBase = nullptr;
 		uint8_t* pCurrent = nullptr;
 		uint8_t* pEnd = nullptr;
 		uint8_t* pCap = nullptr;
-
+		
 		struct Marker {
 			size_t prevMark;
 		};
-
+		
 		uint8_t* pMark = nullptr;
 
 		void ensure(uint8_t* const _Addr) {
@@ -415,10 +447,10 @@ namespace mem {
 		stack(stack&& _Other) noexcept
 			:
 			pBase(std::exchange(_Other.pBase, nullptr)),
-			pMark(std::exchange(_Other.pMark, nullptr)),
 			pCurrent(std::exchange(_Other.pCurrent, nullptr)),
 			pEnd(std::exchange(_Other.pEnd, nullptr)),
-			pCap(std::exchange(_Other.pCap, nullptr))
+			pCap(std::exchange(_Other.pCap, nullptr)),
+			pMark(std::exchange(_Other.pMark, nullptr))
 		{
 
 		}
@@ -441,7 +473,7 @@ namespace mem {
 			if (!pBase)
 				return;
 
-			free(pBase);
+			free(pBase, static_cast<size_t>(pCap - pBase));
 		}
 
 		size_t size() const noexcept {
@@ -480,7 +512,7 @@ namespace mem {
 			if (!pBase)
 				return;
 
-			free(pBase);
+			free(pBase, static_cast<size_t>(pCap - pBase));
 
 			pBase = nullptr;
 			pCurrent = nullptr;
@@ -596,7 +628,7 @@ namespace mem {
 
 	};
 
-	class smartStack : memBase {
+	class smartStack : virtualBlock {
 	private:
 		uint8_t* pBase = nullptr;
 		uint8_t* pCurrent = nullptr;
@@ -612,7 +644,7 @@ namespace mem {
 
 		template <typename _Ty>
 		AllocHead* locateHead(_Ty* pAlloc) const noexcept {
-			return reinterpret_cast<AllocHead*>(alignDown(reinterpret_cast<uint8_t*>(pAlloc) - sizeof(AllocHead), sizeof(AllocHead)));
+			return alignDown<AllocHead>(reinterpret_cast<uint8_t*>(pAlloc) - sizeof(AllocHead), sizeof(AllocHead));
 		}
 
 		template <typename _Ty>
@@ -696,7 +728,7 @@ namespace mem {
 			if (!pBase)
 				return;
 
-			free(pBase);
+			free(pBase, static_cast<size_t>(pCap - pBase));
 		}
 
 		size_t size() const noexcept {
@@ -715,7 +747,7 @@ namespace mem {
 			if (!pBase)
 				return;
 
-			free(pBase);
+			free(pBase, static_cast<size_t>(pCap - pBase));
 
 			pBase = nullptr;
 			pCurrent = nullptr;
@@ -838,6 +870,6 @@ namespace mem {
 
 	};
 
-	inline thread_local stack scratch{16 << 20};
+	inline thread_local stack scratch{32 << 20};
 
 }
