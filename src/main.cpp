@@ -83,8 +83,6 @@ int main() {
     if (error)
         return EXIT_FAILURE;
 
-    return EXIT_SUCCESS;
-
     DisplayContext windowCtx;
     
     error = requestDisplayContext(&windowCtx);
@@ -161,6 +159,12 @@ int main() {
             }
         }
     }
+
+    purgeEmulator(vkContext, emulator);
+    purgeVulkanContext(vkContext);
+
+    purgeDisplayWindow(windowCtx, window);
+    purgeDisplayContext(windowCtx);
 
     return EXIT_SUCCESS;
 }

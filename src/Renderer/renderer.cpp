@@ -880,7 +880,7 @@ int createEmulator(VulkanContext const _Context, const RendererCreateInfo* const
 
 				size_t size;
 
-				int error = io::loadBinary(fragPath, size, nullptr);
+				int error = io::getBinarySize(fragPath, &size);
 
 				if (error) {
 					vkDestroyShaderModule(_device, vertex, nullptr);

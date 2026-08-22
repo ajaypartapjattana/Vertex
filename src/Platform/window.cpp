@@ -164,16 +164,15 @@ int createDisplayWindow(const DisplayContext _Context, const WindowCreateInfo* c
 
 	xcb_void_cookie_t cookie = xcb_create_window_checked(connection, XCB_COPY_FROM_PARENT, window, screen->root, 0, 0, pCreateInfo->width, pCreateInfo->height, 0, XCB_WINDOW_CLASS_INPUT_OUTPUT, screen->root_visual, mask, values);
 
-	xcb_generic_error_t* error = xcb_request_check(connection, cookie);
-
-	std::free(error);
-
-	if (error)
+	if (xcb_generic_error_t* error = xcb_request_check(connection, cookie)) {
+		std::free(error);
 		return -1;
+	}
 
 	xcb_change_property(connection, XCB_PROP_MODE_REPLACE, window, XCB_ATOM_WM_NAME, XCB_ATOM_STRING, 8, strlen(pCreateInfo->title), pCreateInfo->title);
 	xcb_change_property(connection, XCB_PROP_MODE_REPLACE, window, _Context->wmProtocols, XCB_ATOM_ATOM, 32, 1, &_Context->wmDeleteWindow);
 
+	xcb_map_window(connection, window);
 	xcb_flush(connection);
 
 	*pHandle = static_cast<uintptr_t>(window);
@@ -196,6 +195,8 @@ void purgeDisplayWindow(const DisplayContext _Context, WindowHandle _Window) noe
 
 	if (!window)
 		return;
+
+	xcb_unmap_window(connection, window);
 
 	xcb_destroy_window(connection, window);
 	xcb_flush(connection);

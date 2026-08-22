@@ -405,7 +405,7 @@ namespace mem {
 			if (_Addr <= pEnd)
 				return;
 
-			if (_Addr < pCap) {
+			if (_Addr <= pCap) {
 				size_t commitSize = _Addr - pEnd;
 
 				void* pAlloc = commit(pEnd, &commitSize);
