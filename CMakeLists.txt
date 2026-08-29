@@ -25,6 +25,25 @@ file(GLOB_RECURSE VORTX_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
 )
 
+set(WARNING_SUPPRESSIONS
+    -Wno-unused-parameter
+    -Wno-unused-variable
+    -Wno-missing-field-initializers
+)
+
+set_source_files_properties(
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Renderer/vma.cpp"
+    PROPERTIES
+        COMPILE_OPTIONS "${WARNING_SUPPRESSIONS}"
+)
+
+get_source_file_property(VMA_OPTIONS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Renderer/vma.cpp"
+    COMPILE_OPTIONS
+)
+
+message(STATUS "VMA COMPILE_OPTIONS = [${VMA_OPTIONS}]")
+
 add_executable(Vortx ${VORTX_SOURCES})
 
 set(MEMORY_PLATFORM_SRC)

@@ -110,58 +110,58 @@ constexpr static InputKey translateLinuxKey(const uint16_t _Symbol) noexcept {
 
 template <unsigned short _EventType, unsigned _MaxCodes>
 static int hasBits(const int _FileDescriptorIndex, const int* const pCodes, const size_t _CodeCount) noexcept {
-    uint8_t bits[(_MaxCodes + 7) / 8]{};
+	uint8_t bits[(_MaxCodes + 7) / 8]{};
 
 	if (ioctl(_FileDescriptorIndex, EVIOCGBIT(_EventType, sizeof(bits)), bits) < 0)
-        return -1;
+		return -1;
 
-    const int* const pCodeEnd = pCodes + _CodeCount;
-    for (const int* pCode{ pCodes }; pCode != pCodeEnd; ++pCode) {
-        if (bits[*pCode / 8] & (1u << (*pCode % 8)))
-            continue;
+	const int* const pCodeEnd = pCodes + _CodeCount;
+	for (const int* pCode{ pCodes }; pCode != pCodeEnd; ++pCode) {
+		if (bits[*pCode / 8] & (1u << (*pCode % 8)))
+			continue;
 
-        return -1;
-    }
+		return -1;
+	}
 
-    return 0;
+	return 0;
 }
 
 static InputDeviceCapabilityFlags getInputDeviceCapability(const int _FileDescriptorIndex, const InputDeviceCapabilityFlags _CapabilityMask) noexcept {
-    InputDeviceCapabilityFlags capability = INPUT_DEVICE_CAPABILITY_UNDEFINED_BIT;
+	InputDeviceCapabilityFlags capability = INPUT_DEVICE_CAPABILITY_UNDEFINED_BIT;
 
-    if (_CapabilityMask & INPUT_DEVICE_CAPABILITY_KEYBOARD_BIT) {
-        constexpr int keys[7] = { KEY_ESC, KEY_A, KEY_Z, KEY_ENTER, KEY_SPACE, KEY_LEFTSHIFT, KEY_LEFTCTRL };
+	if (_CapabilityMask & INPUT_DEVICE_CAPABILITY_KEYBOARD_BIT) {
+		constexpr int keys[7] = { KEY_ESC, KEY_A, KEY_Z, KEY_ENTER, KEY_SPACE, KEY_LEFTSHIFT, KEY_LEFTCTRL };
 
-        capability |= (hasBits<EV_KEY, KEY_MAX>(_FileDescriptorIndex, keys, 7) == 0) ? INPUT_DEVICE_CAPABILITY_KEYBOARD_BIT : 0u;
-    }
+		capability |= (hasBits<EV_KEY, KEY_MAX>(_FileDescriptorIndex, keys, 7) == 0) ? INPUT_DEVICE_CAPABILITY_KEYBOARD_BIT : 0u;
+	}
 
-    if (_CapabilityMask & INPUT_DEVICE_CAPABILITY_MOUSE_BIT) {
-        constexpr int axes[2] = { REL_X, REL_Y };
-        constexpr int buttons[2] = { BTN_LEFT, BTN_RIGHT };
+	if (_CapabilityMask & INPUT_DEVICE_CAPABILITY_MOUSE_BIT) {
+		constexpr int axes[2] = { REL_X, REL_Y };
+		constexpr int buttons[2] = { BTN_LEFT, BTN_RIGHT };
 
-        capability |= (hasBits<EV_REL, REL_MAX>(_FileDescriptorIndex, axes, 2) == 0 && hasBits<EV_KEY, KEY_MAX>(_FileDescriptorIndex, buttons, 2) == 0) ? INPUT_DEVICE_CAPABILITY_MOUSE_BIT : 0u;
-    }
-    
-    if (_CapabilityMask & INPUT_DEVICE_CAPABILITY_GAMEPAD_BIT) {
-        constexpr int buttons[] = { BTN_SOUTH, BTN_EAST, BTN_START };
-        constexpr int axes[] = { ABS_X, ABS_Y };
+		capability |= (hasBits<EV_REL, REL_MAX>(_FileDescriptorIndex, axes, 2) == 0 && hasBits<EV_KEY, KEY_MAX>(_FileDescriptorIndex, buttons, 2) == 0) ? INPUT_DEVICE_CAPABILITY_MOUSE_BIT : 0u;
+	}
+	
+	if (_CapabilityMask & INPUT_DEVICE_CAPABILITY_GAMEPAD_BIT) {
+		constexpr int buttons[] = { BTN_SOUTH, BTN_EAST, BTN_START };
+		constexpr int axes[] = { ABS_X, ABS_Y };
 
-        capability |= (hasBits<EV_ABS, ABS_MAX>(_FileDescriptorIndex, axes, 2) == 0 && hasBits<EV_KEY, KEY_MAX>(_FileDescriptorIndex, buttons, 3) == 0) ? INPUT_DEVICE_CAPABILITY_GAMEPAD_BIT : 0u;
-    }
+		capability |= (hasBits<EV_ABS, ABS_MAX>(_FileDescriptorIndex, axes, 2) == 0 && hasBits<EV_KEY, KEY_MAX>(_FileDescriptorIndex, buttons, 3) == 0) ? INPUT_DEVICE_CAPABILITY_GAMEPAD_BIT : 0u;
+	}
 
-    return capability;    
+	return capability;    
 }
 
 struct LinuxInputDeviceInfo {
-    InputDeviceCapabilityFlags capability;
-    int fileDescriptorIndex;
-    const char* name;
+	InputDeviceCapabilityFlags capability;
+	int fileDescriptorIndex;
+	const char* name;
 };
 
 struct LinuxInputSet {
-    LinuxInputDeviceInfo keyboard;
-    LinuxInputDeviceInfo mouse;
-    LinuxInputDeviceInfo gamepad;
+	LinuxInputDeviceInfo keyboard;
+	LinuxInputDeviceInfo mouse;
+	LinuxInputDeviceInfo gamepad;
 };
 
 int createInputDeviceSet(InputDeviceSet const pDeviceSet, const InputDeviceCapabilityFlags _InputCapability) noexcept {
@@ -169,10 +169,10 @@ int createInputDeviceSet(InputDeviceSet const pDeviceSet, const InputDeviceCapab
 	
 	LinuxInputSet* const pSet = reinterpret_cast<LinuxInputSet*>(pDeviceSet);
 
-    udev* const udev = udev_new();
+	udev* const udev = udev_new();
 
-    if (!udev)
-        return -1;
+	if (!udev)
+		return -1;
 
 	udev_enumerate* const enumerate = udev_enumerate_new(udev);
 	udev_enumerate_add_match_subsystem(enumerate, "input");
@@ -183,7 +183,7 @@ int createInputDeviceSet(InputDeviceSet const pDeviceSet, const InputDeviceCapab
 
 	udev_list_entry* entry;
 
-    InputDeviceCapabilityFlags capabilityMask = _InputCapability;
+	InputDeviceCapabilityFlags capabilityMask = _InputCapability;
 
 	udev_list_entry_foreach(entry, devices) {
 		if (!capabilityMask)
@@ -199,20 +199,20 @@ int createInputDeviceSet(InputDeviceSet const pDeviceSet, const InputDeviceCapab
 		if (strncmp(devnode, "/dev/input/event", 16u) != 0)
 			continue;
 
-	    int fd = open(devnode, O_RDONLY | O_NONBLOCK);
+		int fd = open(devnode, O_RDONLY | O_NONBLOCK);
 
-        InputDeviceCapabilityFlags capability = getInputDeviceCapability(fd, capabilityMask);
+		InputDeviceCapabilityFlags capability = getInputDeviceCapability(fd, capabilityMask);
 
-        if (!capability)
-            close(fd);
+		if (!capability)
+			close(fd);
 
-        if (capability & INPUT_DEVICE_CAPABILITY_KEYBOARD_BIT) {
-            pSet->keyboard.capability = capability;
-            pSet->keyboard.fileDescriptorIndex = fd;
-            pSet->keyboard.name = udev_device_get_property_value(device, "NAME");
+		if (capability & INPUT_DEVICE_CAPABILITY_KEYBOARD_BIT) {
+			pSet->keyboard.capability = capability;
+			pSet->keyboard.fileDescriptorIndex = fd;
+			pSet->keyboard.name = udev_device_get_property_value(device, "NAME");
 
-            capabilityMask &= ~INPUT_DEVICE_CAPABILITY_KEYBOARD_BIT;
-        }
+			capabilityMask &= ~INPUT_DEVICE_CAPABILITY_KEYBOARD_BIT;
+		}
 
 		if (capability & INPUT_DEVICE_CAPABILITY_MOUSE_BIT) {
 			pSet->mouse.capability = capability;
@@ -230,6 +230,8 @@ int createInputDeviceSet(InputDeviceSet const pDeviceSet, const InputDeviceCapab
 			capability &= ~INPUT_DEVICE_CAPABILITY_GAMEPAD_BIT;
 		}
 	}
+
+	return 0;
 }
 
 int readInputFile();

@@ -105,7 +105,7 @@ namespace io {
 		}
 
 		int copy_raw(void* const pDst, size_t _ByteCount) noexcept {
-			assert(bitCount & 7u == 0);
+			assert((bitCount & 7u) == 0);
 			
 			uint8_t* _pDst = reinterpret_cast<uint8_t*>(pDst);
 			size_t remaining = _ByteCount;
@@ -513,7 +513,7 @@ namespace io {
 		return intrin_byteSwap32(raw);
 	}
 
-	constexpr size_t MAX_LENGTH_CODE_COUNT = 318u;
+	constexpr size_t MAX_LENGTH_CODE_COUNT = 320u;
 	constexpr size_t HLIT_TABLE_SIZE = 2048u;
 	constexpr size_t HDIST_TABLE_SIZE = 1024u;
 
@@ -613,7 +613,7 @@ namespace io {
 			return -1;
 
 		const void* const pStreamEnd = reinterpret_cast<const uint8_t*>(pCreateInfo->pStreamSrc) + pCreateInfo->StreamSize;
-		inflator->parser.source(pCreateInfo->pStreamSrc + 8u, pStreamEnd);
+		inflator->parser.source(reinterpret_cast<const uint8_t*>(pCreateInfo->pStreamSrc) + 8u, pStreamEnd);
 		
 		inflator->stage = DEFLATE_STREAM_STAGE_HEADER;
 		inflator->resolveBuffer.memory(_ResolveMemory);
@@ -642,7 +642,7 @@ namespace io {
 		_Inflator->stage = DEFLATE_STREAM_STAGE_HEADER;
 
 		const void* const pNewEnd = reinterpret_cast<const uint8_t*>(pNewSrc) + _NewSize;
-		_Inflator->parser.source(pNewSrc + 8u, pNewEnd);
+		_Inflator->parser.source(reinterpret_cast<const uint8_t*>(pNewSrc) + 8u, pNewEnd);
 
 		return 0;
 	}
@@ -699,7 +699,7 @@ namespace io {
 				uint16_t BLEN = intrin_byteSwap16(static_cast<uint16_t>(stream.read(16)));
 				uint16_t NBLEN = intrin_byteSwap16(static_cast<uint16_t>(stream.read(16)));
 
-				if (~BLEN != NBLEN)
+				if (static_cast<uint16_t>(~BLEN) != NBLEN)
 					return -1;
 
 				if (stream.copy_raw(buffer->pCurrent, BLEN))
@@ -712,7 +712,7 @@ namespace io {
 				switch (_Inflator->env) {
 				case DEFLATE_BLOCK_TYPE_STATIC: {
 					const size_t HLIT = generateStaticHLIT(lengths);
-					const size_t HDIST = generateStaticHDIST(lengths + HLIT);
+					generateStaticHDIST(lengths + HLIT);
 
 					uint8_t* const LIT_base = lengths;
 					uint8_t* const DIST_base = lengths + HLIT;
@@ -846,6 +846,8 @@ namespace io {
 				return result;
 
 		} while (_Inflator->prog != DEFLATE_BLOCK_PROGRESSION_TYPE_TERMINAL);
+
+		return 0;
 	}
 
 	int fetchPngInfo(const void* pBin, size_t _Size, ImageInfo* const pInfo) noexcept {

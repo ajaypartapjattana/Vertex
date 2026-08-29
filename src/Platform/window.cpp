@@ -5,6 +5,8 @@
 
 #include <vulkan/vulkan.h>
 
+#include <core/Memory/memory.h>
+
 #include "platform_core.h"
 
 #if defined(PLATFORM_WINDOWS)
@@ -87,7 +89,7 @@ bool Platform::pollEvents() noexcept {
 #include <xcb/xcb_icccm.h>
 #include <vulkan/vulkan_xcb.h>
 
-xcb_atom_t internAtom(xcb_connection_t* const pConnection, const char* _Name) {
+static xcb_atom_t internAtom(xcb_connection_t* const pConnection, const char* _Name) {
 	xcb_intern_atom_cookie_t cookie = xcb_intern_atom(pConnection, 0, strlen(_Name), _Name);
 
 	xcb_intern_atom_reply_t* reply = xcb_intern_atom_reply(pConnection, cookie, nullptr);
@@ -106,6 +108,7 @@ struct DisplayContext_T {
 
 	xcb_atom_t wmProtocols;
 	xcb_atom_t wmDeleteWindow;
+	xcb_atom_t netActiveWindow;
 };
 
 int requestDisplayContext(DisplayContext* const pContext) noexcept {
@@ -125,17 +128,23 @@ int requestDisplayContext(DisplayContext* const pContext) noexcept {
 		const xcb_atom_t wmDeleteWindow = internAtom(_connection, "WM_DELETE_WINDOW");
 
 		if (wmDeleteWindow == XCB_ATOM_NONE)
-			break;		
+			break;
+
+		const xcb_atom_t netActiveWindow = internAtom(_connection, "_NET_ACTIVE_WINDOW");
+
+		if (netActiveWindow == XCB_ATOM_NONE)
+			break;
 
 		DisplayContext const context = new(std::nothrow) DisplayContext_T;
 		
 		if (!pContext)
 			break;
 
-		context->connection = _connection;
-		
+		context->netActiveWindow = netActiveWindow;			
 		context->wmProtocols = wmProtocols;
 		context->wmDeleteWindow = wmDeleteWindow;
+			
+		context->connection = _connection;
 
 		*pContext = context;	
 
@@ -149,126 +158,102 @@ int requestDisplayContext(DisplayContext* const pContext) noexcept {
 	return -1;
 }
 
-int createDisplayWindow(const DisplayContext _Context, const WindowCreateInfo* const pCreateInfo, WindowHandle* const pHandle) noexcept {
+void destroyDisplayContext(DisplayContext _Context) noexcept {
+	xcb_disconnect(_Context->connection);
+
+	delete _Context;
+}
+
+struct DisplayWindow_T{
+	xcb_window_t window;
+	const xcb_screen_t* screen;
+	uint16_t width;
+	uint16_t height;
+	int16_t x;
+	int16_t y;
+};
+
+int createDisplayWindow(const DisplayContext _Context, const WindowCreateInfo* const pCreateInfo, DisplayWindow* const pWindow) noexcept {
 	xcb_connection_t* const connection = _Context->connection;
 
-	const xcb_setup_t* setup = xcb_get_setup(connection);
-	xcb_screen_iterator_t iterator = xcb_setup_roots_iterator(setup);
+	xcb_window_t _window{};
 
-	xcb_screen_t* screen = iterator.data;
+	do {
+		const xcb_setup_t* setup = xcb_get_setup(connection);
+		xcb_screen_iterator_t iterator = xcb_setup_roots_iterator(setup);
 
-	xcb_window_t window = xcb_generate_id(connection);
+		xcb_screen_t* screen = iterator.data;
 
-	uint32_t mask = XCB_CW_BACK_PIXEL | XCB_CW_EVENT_MASK;
-	uint32_t values[] = { screen->black_pixel, XCB_EVENT_MASK_EXPOSURE | XCB_EVENT_MASK_KEY_PRESS | XCB_EVENT_MASK_KEY_RELEASE | XCB_EVENT_MASK_STRUCTURE_NOTIFY };
-
-	xcb_void_cookie_t cookie = xcb_create_window_checked(connection, XCB_COPY_FROM_PARENT, window, screen->root, 0, 0, pCreateInfo->width, pCreateInfo->height, 0, XCB_WINDOW_CLASS_INPUT_OUTPUT, screen->root_visual, mask, values);
-
-	if (xcb_generic_error_t* error = xcb_request_check(connection, cookie)) {
-		std::free(error);
-		return -1;
-	}
-
-	xcb_change_property(connection, XCB_PROP_MODE_REPLACE, window, XCB_ATOM_WM_NAME, XCB_ATOM_STRING, 8, strlen(pCreateInfo->title), pCreateInfo->title);
-	xcb_change_property(connection, XCB_PROP_MODE_REPLACE, window, _Context->wmProtocols, XCB_ATOM_ATOM, 32, 1, &_Context->wmDeleteWindow);
-
-	xcb_map_window(connection, window);
-	xcb_flush(connection);
-
-	*pHandle = static_cast<uintptr_t>(window);
-	return 0;
-}
-
-void getVulkanSurfaceDependencyInfo(DisplayContext const _Context, const WindowHandle _Window, VulkanSurfaceDependencyInfo* const pDependencyInfo) noexcept {
-	strcpy(pDependencyInfo->SurfaceType, "xcb");
-	pDependencyInfo->context = (void*)_Context->connection;
-	pDependencyInfo->window = (uintptr_t)_Window;
-}
-
-void purgeDisplayWindow(const DisplayContext _Context, WindowHandle _Window) noexcept {
-	xcb_connection_t* const connection = reinterpret_cast<xcb_connection_t*>(_Context);
-	
-	if (!connection)
-		return;
-	
-	const xcb_window_t window = static_cast<xcb_window_t>(_Window);
-
-	if (!window)
-		return;
-
-	xcb_unmap_window(connection, window);
-
-	xcb_destroy_window(connection, window);
-	xcb_flush(connection);
-}
-
-size_t pollWindowEvent(const DisplayContext _Context, WindowEvent* const pEventBuffer, const size_t _BufferSize) noexcept {
-	const DisplayContext_T* const context = reinterpret_cast<const DisplayContext_T*>(_Context);
-
-	const WindowEvent* const pEnd = pEventBuffer + _BufferSize;
-	
-	for(WindowEvent* pEvent{pEventBuffer}; pEvent != pEnd;) {
-		xcb_generic_event_t* const event = xcb_poll_for_event(context->connection);
-
-		if (!event)
-			return static_cast<size_t>(pEvent - pEventBuffer);
-
-		const uint8_t type = event->response_type & ~0x80;
-
-		switch (type) {
-		case XCB_CONFIGURE_NOTIFY: {
-			const xcb_configure_notify_event_t* const configure = reinterpret_cast<xcb_configure_notify_event_t*>(event);
-
-			pEvent->window = static_cast<WindowHandle>(configure->window);
-			pEvent->type = WINDOW_EVENT_TYPE_WINDOW_RESIZE;
-
-			pEvent->eventInfo.extent = { configure->width, configure->height };
-		}
-			++pEvent;
+		_window = xcb_generate_id(connection);
 		
+		uint32_t mask = XCB_CW_BACK_PIXEL | XCB_CW_EVENT_MASK;
+		uint32_t values[] = { screen->black_pixel, XCB_EVENT_MASK_EXPOSURE | XCB_EVENT_MASK_STRUCTURE_NOTIFY | XCB_EVENT_MASK_FOCUS_CHANGE };
+		
+		xcb_void_cookie_t cookie = xcb_create_window_checked(connection, XCB_COPY_FROM_PARENT, _window, screen->root, 0, 0, pCreateInfo->width, pCreateInfo->height, 0, XCB_WINDOW_CLASS_INPUT_OUTPUT, screen->root_visual, mask, values);
+
+		if (xcb_generic_error_t* error = xcb_request_check(connection, cookie)) {
+			std::free(error);
 			break;
-
-		case XCB_CLIENT_MESSAGE: {
-			const xcb_client_message_event_t* const message = reinterpret_cast<xcb_client_message_event_t*>(event);
-
-			if (message->type != context->wmProtocols)
-				break;
-
-			if (message->data.data32[0] != context->wmDeleteWindow)
-				break;
-
-			pEvent->window = static_cast<WindowHandle>(message->window);
-			pEvent->type = WINDOW_EVENT_TYPE_WINDOW_CLOSE;
-		}
-			++pEvent;
-
-			break;
-
 		}
 
-		std::free(event);
-	}	
+		xcb_change_property(connection, XCB_PROP_MODE_REPLACE, _window, XCB_ATOM_WM_NAME, XCB_ATOM_STRING, 8, strlen(pCreateInfo->title), pCreateInfo->title);
+		xcb_change_property(connection, XCB_PROP_MODE_REPLACE, _window, _Context->wmProtocols, XCB_ATOM_ATOM, 32, 1, &_Context->wmDeleteWindow);
 
-	return _BufferSize;
+		if (!xcb_flush(connection))
+			break;
+
+		DisplayWindow const displayWindow = new(std::nothrow) DisplayWindow_T;
+
+		if (!displayWindow)
+			break;
+
+		displayWindow->window = _window;
+		displayWindow->screen = screen;
+		displayWindow->width = pCreateInfo->width;
+		displayWindow->height = pCreateInfo->height;
+
+		*pWindow = displayWindow;
+
+		return 0;
+
+	} while (false);
+
+	if (_window)
+		xcb_destroy_window(connection, _window);
+
+	return -1;
 }
 
-void purgeDisplayContext(DisplayContext _Context) noexcept {
-	DisplayContext_T* const context = reinterpret_cast<DisplayContext_T*>(_Context);
+void destroyDisplayWindow(const DisplayContext _Context, DisplayWindow const _Window) noexcept {
+	xcb_connection_t* const connection = _Context->connection;
 
-	if (!context)
-		return;
-
-	xcb_disconnect(context->connection);
-
-	delete context;
+	xcb_destroy_window(connection, _Window->window);
+	xcb_flush(connection);
 }
 
-int getWindowGeometry(const DisplayContext _Context, const WindowHandle _Window, WindowGeomentry* const pGeomentry) noexcept {
-	assert(pGeomentry);
+void raiseDisplayWindow(DisplayContext const _Context, DisplayWindow const _Window) noexcept {
+	const xcb_screen_t* const screen = _Window->screen;
 
-	xcb_connection_t* const connection = reinterpret_cast<xcb_connection_t*>(_Context);
+	xcb_client_message_event_t event{};
+	event.response_type = XCB_CLIENT_MESSAGE;
+	event.window = _Window->window;
+	event.type = _Context->netActiveWindow;
+	event.format = 32;
+	event.data.data32[0] = 1;
+	event.data.data32[1] = XCB_CURRENT_TIME;
+	event.data.data32[2] = XCB_WINDOW_NONE;
+	event.data.data32[3] = 0;
+	event.data.data32[4] = 0;
 
-	const xcb_get_geometry_cookie_t cookie = xcb_get_geometry(connection, static_cast<xcb_window_t>(_Window));
+	xcb_send_event(_Context->connection, 0, screen->root, XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT | XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY, reinterpret_cast<const char*>(&event));
+
+	xcb_flush(_Context->connection);
+}
+
+int queryWindowGeometry(const DisplayContext _Context, DisplayWindow const _Window, WindowGeomentry* const pGeomentry) noexcept {
+	xcb_connection_t* const connection = _Context->connection;
+
+	const xcb_get_geometry_cookie_t cookie = xcb_get_geometry(connection, _Window->window);
 	xcb_get_geometry_reply_t* const reply = xcb_get_geometry_reply(connection, cookie, nullptr);
 
 	if (!reply)
@@ -284,28 +269,207 @@ int getWindowGeometry(const DisplayContext _Context, const WindowHandle _Window,
 	return 0;
 }
 
-void setWindowGeometry(const DisplayContext _Context, const WindowHandle _Window, const WindowGeomentry* const pGeometry) noexcept {
-	xcb_connection_t* const connection = reinterpret_cast<xcb_connection_t*>(_Context);
-	const xcb_window_t window = static_cast<xcb_window_t>(_Window);
-	
+void setWindowGeometry(const DisplayContext _Context, DisplayWindow const _Window, const WindowGeomentry* const pGeometry) noexcept {
 	uint32_t values[] = { 
 		static_cast<uint32_t>(pGeometry->x),
 		static_cast<uint32_t>(pGeometry->y),
 		static_cast<uint32_t>(pGeometry->width), 
 		static_cast<uint32_t>(pGeometry->height) 
 	};
+	
+	xcb_connection_t* const connection = _Context->connection;
 
-	xcb_configure_window(connection, window, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, values);
+	xcb_configure_window(connection, _Window->window, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, values);
 	xcb_flush(connection);
 }
 
-void setWindowTitle(const DisplayContext _Context, const WindowHandle _Window, const char* const _Title) noexcept {
-	xcb_connection_t* const connection = reinterpret_cast<xcb_connection_t*>(_Context);
-	const xcb_window_t window = static_cast<xcb_window_t>(_Window);
+void setWindowTitle(const DisplayContext _Context, DisplayWindow const _Window, const char* const _Title) noexcept {
+	xcb_connection_t* const connection = _Context->connection;
+	const xcb_window_t window = _Window->window;
 	
 	xcb_change_property(connection, XCB_PROP_MODE_REPLACE, window, XCB_ATOM_WM_NAME, XCB_ATOM_STRING, 8, strlen(_Title), _Title);
-
 	xcb_flush(connection);
+}
+
+void getVulkanSurfaceDependencyInfo(DisplayContext const _Context, DisplayWindow const _Window, VulkanSurfaceDependencyInfo* const pDependencyInfo) noexcept {
+	pDependencyInfo->context = (void*)_Context->connection;
+	pDependencyInfo->window = (uintptr_t)_Window->window;
+}
+
+enum WindowEventType : uint32_t {
+	WINDOW_EVENT_TYPE_WINDOW_CONFIGURE,
+	WINDOW_EVENT_TYPE_FOCUS_GAINED,
+	WINDOW_EVENT_TYPE_FOCUS_LOST,
+	WINDOW_EVENT_TYPE_WINDOW_CLOSE
+};
+
+struct WindowEvent {
+	xcb_window_t window;
+	WindowEventType type;
+	struct {
+		uint16_t width;
+		uint16_t height;
+	} extent;
+	struct {
+		int16_t x;
+		int16_t y;
+	} position;
+};
+
+struct EventBuffer_T {
+	WindowEventFlags mask;
+	uint32_t count;
+	mem::span<WindowEvent> event;
+};
+
+int createEventBuffer(const EventBufferCreateInfo* const pCreateInfo, EventBuffer* const pBuffer) noexcept {
+	mem::span<WindowEvent> _event;
+
+	do {
+		_event = { new(std::nothrow) WindowEvent[pCreateInfo->size], (size_t)pCreateInfo->size };
+
+		if (!_event)
+			break;
+
+		EventBuffer const buffer = new(std::nothrow) EventBuffer_T;
+
+		if (!buffer)
+			break;
+
+		buffer->mask = pCreateInfo->eventMask;
+		buffer->event = _event;
+
+		*pBuffer = buffer;
+
+		return 0;
+
+	} while (false);
+
+	if (_event)
+		delete[] _event;
+
+	return -1;
+}
+
+void pollWindowEvents(DisplayContext const _Context, EventBuffer const _Buffer) noexcept {
+	xcb_connection_t* const connection = _Context->connection;
+
+	WindowEvent* pEvent = _Buffer->event.pBegin;
+	const WindowEvent* const pEventEnd = _Buffer->event.pEnd;
+	while (pEvent != pEventEnd) {
+		xcb_generic_event_t* const event = xcb_poll_for_event(connection);
+
+		if (!event)
+			break;
+
+		const uint8_t type = event->response_type & ~0x80;
+
+		switch (type) {
+		case XCB_CONFIGURE_NOTIFY: {
+			const xcb_configure_notify_event_t* const configure = reinterpret_cast<xcb_configure_notify_event_t*>(event);
+
+			pEvent->window = configure->window;
+			pEvent->type = WINDOW_EVENT_TYPE_WINDOW_CONFIGURE;
+
+			pEvent->extent = { configure->width, configure->height };
+			pEvent->position = { configure->x, configure->y };
+			
+			++pEvent;
+		}
+
+			break;
+
+		case XCB_FOCUS_IN: {
+			const xcb_focus_in_event_t* const focus = reinterpret_cast<xcb_focus_in_event_t*>(event);
+
+			pEvent->window = focus->event;
+			pEvent->type = WINDOW_EVENT_TYPE_FOCUS_GAINED;
+			
+			++pEvent;
+		}
+
+			break;
+
+		case XCB_FOCUS_OUT: {
+			const xcb_focus_out_event_t* const focus = reinterpret_cast<xcb_focus_out_event_t*>(event);
+
+			pEvent->window = focus->event;
+			pEvent->type = WINDOW_EVENT_TYPE_FOCUS_LOST;
+		}
+
+			break;
+
+		case XCB_CLIENT_MESSAGE: {
+			const xcb_client_message_event_t* const message = reinterpret_cast<xcb_client_message_event_t*>(event);
+
+			if (message->type != _Context->wmProtocols)
+				break;
+
+			if (message->data.data32[0] != _Context->wmDeleteWindow)
+				break;
+
+			pEvent->window = message->window;
+			pEvent->type = WINDOW_EVENT_TYPE_WINDOW_CLOSE;
+
+			++pEvent;
+		}
+
+			break;
+
+		}
+
+		std::free(event);
+	}
+
+	_Buffer->count = static_cast<uint32_t>(pEvent - _Buffer->event.pBegin);
+}
+
+void resolveWindowEvents(EventBuffer const _EventBuffer, DisplayWindow const _Window, WindowEventFlags* const pEventFlags) noexcept {
+	const WindowEvent* const pEventEnd = _EventBuffer->event.pBegin + _EventBuffer->count;
+
+	const xcb_window_t window = _Window->window;
+
+	WindowEventFlags events = 0;
+
+	for (const WindowEvent* pEvent{ _EventBuffer->event.pBegin }; pEvent != pEventEnd; ++pEvent) {
+		if (pEvent->window != window)
+			continue;
+
+		switch (pEvent->type) {
+		case WINDOW_EVENT_TYPE_WINDOW_CONFIGURE:
+			if (pEvent->extent.width != _Window->width || pEvent->extent.height != _Window->height) {
+				events |= WINDOW_EVENT_RESIZE_BIT;
+				_Window->width = pEvent->extent.width;
+				_Window->height = pEvent->extent.height;
+			}
+			
+			if (pEvent->position.x != _Window->x || pEvent->position.y != _Window->y) {
+				events |= WINDOW_EVENT_MOVE_BIT;
+				_Window->x = pEvent->position.x;
+				_Window->y = pEvent->position.y;
+			}
+		
+			break;
+			
+		case WINDOW_EVENT_TYPE_FOCUS_GAINED:
+			events |= WINDOW_EVENT_FOCUS_GAINED_BIT;
+
+			break;
+
+		case WINDOW_EVENT_TYPE_FOCUS_LOST:
+			events |= WINDOW_EVENT_FOCUS_LOST_BIT;
+
+			break;
+
+		case WINDOW_EVENT_TYPE_WINDOW_CLOSE:
+			events |= WINDOW_EVENT_CLOSE_BIT;
+
+		default:
+			break;
+		}
+	}
+
+	*pEventFlags = events;
 }
 
   #elif defined(WINDOW_X11)

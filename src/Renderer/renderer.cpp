@@ -1,5 +1,6 @@
 #include <array>
 #include <algorithm>
+#include <vector>
 
 #if defined(WINDOW_WIN32)
 	#define VK_USE_PLATFORM_WIN32_KHR
@@ -16,6 +17,7 @@
 #include <core/io/io.h>
 #include <core/util.h>
 
+#include "Vertex/vertex.hh"
 #include "transfer.h"
 #include "renderer.h"
 
@@ -30,20 +32,17 @@ struct PhysicalDevice {
 
 struct VulkanContext_T {
 	VkInstance instance;
-
-	mem::stack stash;
 	mem::span<PhysicalDevice> physicalDevices;
 };
 
-int requestVulkanContext(VulkanContext* const pContext) noexcept {
+int requestVulkanContext(mem::stack* const pScratch, VulkanContext* const pContext) noexcept {
 	VkInstance _instance = VK_NULL_HANDLE;
-	mem::stack _stash(64ull << 10);
 	
 	do {
 		VkResult result;
-		
-		mem::scratch.mark();
 
+		pScratch->mark();
+		
 	#if defined(_DEBUG)
 		constexpr std::array<const char*, 1> instanceLayers{
 			"VK_LAYER_KHRONOS_validation"
@@ -141,9 +140,16 @@ int requestVulkanContext(VulkanContext* const pContext) noexcept {
 		if (result != VK_SUCCESS)
 			break;
 
-		mem::span<PhysicalDevice> physicalDevices = _stash.alloc<PhysicalDevice>(physicalDeviceCount);
-		mem::span<VkPhysicalDevice> devicehandles = mem::scratch.alloc<VkPhysicalDevice>(physicalDeviceCount);
-		
+		mem::span<PhysicalDevice> physicalDevices = { new(std::nothrow) PhysicalDevice[physicalDeviceCount], (size_t)physicalDeviceCount };
+
+		if (!physicalDevices)
+			break;
+
+		mem::span<VkPhysicalDevice> devicehandles = pScratch->alloc<VkPhysicalDevice>(physicalDeviceCount);
+
+		if (!devicehandles)
+			break;
+
 		result = vkEnumeratePhysicalDevices(_instance, &physicalDeviceCount, devicehandles);
 		
 		if (result != VK_SUCCESS)
@@ -160,36 +166,33 @@ int requestVulkanContext(VulkanContext* const pContext) noexcept {
 		}
 
 		VulkanContext const context = new(std::nothrow) VulkanContext_T;
-
+		
 		if (!context)
-			break;
+		break;
+		
+		pScratch->restore();
 
 		context->instance = _instance;
-		context->stash = std::move(_stash);
 		context->physicalDevices = physicalDevices;
 		
 		*pContext = context;
-
-		mem::scratch.restore();
-
+		
 		return 0;
 
 	} while (false);
 
-	mem::scratch.restore();
+	pScratch->restore();
 
 	if (_instance)
 		vkDestroyInstance(_instance, nullptr);
 
-	_stash.reset();
-
 	return -1;
 }
 
-void purgeVulkanContext(VulkanContext const _Context) noexcept {
+void destroyVulkanContext(VulkanContext const _Context) noexcept {
 	vkDestroyInstance(_Context->instance, nullptr);
-	_Context->stash.reset();
 
+	delete[] _Context->physicalDevices;
 	delete _Context;
 }
 
@@ -210,6 +213,8 @@ int enumeratePhysicalDevices(VulkanContext const _Context, uint32_t* const pCoun
 
 	return 0;
 }
+
+constexpr uint32_t MIN_BUFFERING_COUNT = 2;
 
 struct QueueFamilyIndices {
 	uint32_t graphics;
@@ -254,79 +259,37 @@ struct Semaphores {
 };
 
 struct Emulator_T {
-	mem::marker emulatorBase;
-	mem::stack stash;
+	VkInstance instance;
+	VkPhysicalDevice physicalDevice;
 
 	VkSurfaceKHR surface;
 	VkDevice device;
 	QueueFamilyIndices queueFamily;
 	DeviceQueues queue;
-	CommandPools commandPool;
-	VmaAllocator allocator;
-	VkBuffer stagingBuffer;
-	VmaAllocation stagingAllocation;
-	mem::span<uint8_t> stagingSpan;
-	rndr::TransferStage transferStage;
-	VkSwapchainKHR swapchain;
-	VkSurfaceFormatKHR surfaceFormat;
-	VkPresentModeKHR presentMode;
-	mem::span<VkImage> swapchainImages;
-	mem::span<VkImageView> swapchainImageView;
-	RenderPasses renderPass;
-	Samplers sampler;
-	DescriptorSetlayouts descriptorSetLayout;
-	PipelineLayouts pipelineLayout;
-	Pipelines pipeline;
 	
-	VkDescriptorPool descriptorPool;
-	VkDescriptorSet descriptorSet;
-
-	Semaphores semaphore;
-	VkFence fence;
 };
-int createEmulator(VulkanContext const _Context, const RendererCreateInfo* const pCreateInfo, Emulator* const pEmulator) noexcept {
-	mem::stack _stash;
+
+int createEmulator(VulkanContext const _Context, const EmulatorCreateInfo* const pCreateInfo, mem::stack* const pScratch, Emulator* const pEmulator) noexcept {
+	const VkInstance instance = _Context->instance;
 	
 	VkSurfaceKHR _surface = VK_NULL_HANDLE;
 	VkDevice _device = VK_NULL_HANDLE;
-	CommandPools _commandPool{};
-	VmaAllocator _allocator = VK_NULL_HANDLE;
-	VkBuffer _stagingBuffer = VK_NULL_HANDLE;
-	VmaAllocation _stagingAllocation = VK_NULL_HANDLE;
-	VkSwapchainKHR _swapchain = VK_NULL_HANDLE;
-	mem::span<VkImageView> _swapchainImageView;
-	RenderPasses _renderPass{};
-	Samplers _sampler{};
-	DescriptorSetlayouts _descriptorSetLayout{};
-	PipelineLayouts _pipelineLayout{};
-	Pipelines _pipeline{};
-
-	VkDescriptorPool _descriptorPool = VK_NULL_HANDLE;
-	Semaphores _semaphore{};
-	VkFence _fence = VK_NULL_HANDLE;
 
 	do {
 		VkResult result;
 
-		mem::scratch.mark();
+		pScratch->mark();
 		
-		try {
-			_stash.resize(64u << 10);
-		}
-		catch (const std::exception& _Except) {
-			break;
-		}
-
 	  #if defined(WINDOW_WIN32)
 		{
-			VkXcbSurfaceCreateInfoKHR createInfo{};
-			createInfo.sType = VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR;
+			VkWin32SurfaceCreateInfoKHR createInfo{};
+			createInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
 			createInfo.pNext = nullptr;
 			createInfo.flags = 0;
-			createInfo.connection = reinterpret_cast<xcb_connection_t*>(pCreateInfo->windowContext);
-			createInfo.window = static_cast<xcb_window_t>(pCreateInfo->windowHandle);
+			createInfo.connection = reinterpret_cast<HINSTANCE>(pCreateInfo->windowContext);
+			createInfo.window = static_cast<HWND>(pCreateInfo->windowHandle);
 
-			result = vkCreateXcbSurfaceKHR(_Context->instance, &createInfo, nullptr, &_surface);
+			result = vkCreateWin32SurfaceKHR(instance, &createInfo, nullptr, &_surface);
 		}
 	  #elif defined(WINDOW_XCB)
 		{
@@ -337,7 +300,7 @@ int createEmulator(VulkanContext const _Context, const RendererCreateInfo* const
 			createInfo.connection = reinterpret_cast<xcb_connection_t*>(pCreateInfo->windowContext);
 			createInfo.window = static_cast<xcb_window_t>(pCreateInfo->windowHandle);
 
-			result = vkCreateXcbSurfaceKHR(_Context->instance, &createInfo, nullptr, &_surface);
+			result = vkCreateXcbSurfaceKHR(instance, &createInfo, nullptr, &_surface);
 		}
 	  #elif defined(WINDOW_WAYLAND)
 	  	{
@@ -348,7 +311,7 @@ int createEmulator(VulkanContext const _Context, const RendererCreateInfo* const
 			createInfo.connection = reinterpret_cast<xcb_connection_t*>(pCreateInfo->windowContext);
 			createInfo.window = static_cast<xcb_window_t>(pCreateInfo->windowHandle);
 
-			result = vkCreateXcbSurfaceKHR(_Context->instance, &createInfo, nullptr, &_surface);
+			result = vkCreateXcbSurfaceKHR(instance, &createInfo, nullptr, &_surface);
 		}
 	  #elif defined(WINDOW_X11)
 	  	{
@@ -359,7 +322,7 @@ int createEmulator(VulkanContext const _Context, const RendererCreateInfo* const
 			createInfo.connection = reinterpret_cast<xcb_connection_t*>(pCreateInfo->windowContext);
 			createInfo.window = static_cast<xcb_window_t>(pCreateInfo->windowHandle);
 
-			result = vkCreateXcbSurfaceKHR(_Context->instance, &createInfo, nullptr, &_surface);
+			result = vkCreateXcbSurfaceKHR(instance, &createInfo, nullptr, &_surface);
 		}
 	  #endif
 
@@ -369,7 +332,7 @@ int createEmulator(VulkanContext const _Context, const RendererCreateInfo* const
 		const uint32_t physicalDeviceIndex = pCreateInfo->physicalDevice;
 		const VkPhysicalDevice physicalDevice = _Context->physicalDevices[physicalDeviceIndex].handle;
 
-		mem::static_vector<uint32_t> uniqueQueueFamilies = mem::scratch.alloc<uint32_t>(3);
+		mem::static_vector<uint32_t> uniqueQueueFamilies = pScratch->alloc<uint32_t>(3u);
 
 		QueueFamilyIndices queueFamily = { INVALID_QUEUE_FAMILY, INVALID_QUEUE_FAMILY, INVALID_QUEUE_FAMILY };
 
@@ -377,10 +340,10 @@ int createEmulator(VulkanContext const _Context, const RendererCreateInfo* const
 			uint32_t queueFamilyCount;
 			vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, nullptr);
 
-			mem::span<VkQueueFamilyProperties> queueFamilies = mem::scratch.alloc<VkQueueFamilyProperties>(queueFamilyCount);
+			mem::span<VkQueueFamilyProperties> queueFamilies = pScratch->alloc<VkQueueFamilyProperties>(queueFamilyCount);
 			vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilies);
 
-			mem::span<uint32_t> familyRole = mem::scratch.alloc<uint32_t>(queueFamilyCount);
+			mem::span<uint32_t> familyRole = pScratch->alloc<uint32_t>(queueFamilyCount);
 			familyRole.assign_default();
 
 			constexpr VkQueueFlags releventCapabilities = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT;
@@ -438,7 +401,7 @@ int createEmulator(VulkanContext const _Context, const RendererCreateInfo* const
 		{
 			const size_t queueInfoCount = uniqueQueueFamilies.size();
 
-			mem::span<VkDeviceQueueCreateInfo> queueInfos = mem::scratch.alloc<VkDeviceQueueCreateInfo>(queueInfoCount);
+			mem::span<VkDeviceQueueCreateInfo> queueInfos = pScratch->alloc<VkDeviceQueueCreateInfo>(queueInfoCount);
 
 			constexpr float queuePriority = 1.0f;
 
@@ -486,42 +449,175 @@ int createEmulator(VulkanContext const _Context, const RendererCreateInfo* const
 		vkGetDeviceQueue(_device, queueFamily.transfer, 0, &deviceQueue.transfer);
 		vkGetDeviceQueue(_device, queueFamily.present, 0, &deviceQueue.present);
 
+		Emulator const emulator = new(std::nothrow) Emulator_T;
+
+		if (!emulator)
+			break;
+
+		pScratch->restore();
+
+		emulator->instance = instance;
+		emulator->physicalDevice = physicalDevice;
+
+		emulator->surface = _surface;
+		emulator->device = _device;
+		emulator->queueFamily = queueFamily;
+		emulator->queue = deviceQueue;
+
+		*pEmulator = emulator;
+
+		return 0;
+
+	} while (false);
+
+	pScratch->restore();
+
+	if (_device)
+		vkDestroyDevice(_device, nullptr);
+
+	if (_surface)
+		vkDestroySurfaceKHR(_Context->instance, _surface, nullptr);
+
+	return -1;
+}
+
+void destroyEmulator(Emulator const _Emulator) noexcept {
+	vkDestroyDevice(_Emulator->device, nullptr);
+
+	vkDestroySurfaceKHR(_Emulator->instance, _Emulator->surface, nullptr);
+
+	delete _Emulator;
+}
+
+int waitEmulator(Emulator const _Emulator) noexcept {
+	const VkDevice device = _Emulator->device;
+
+	if (vkDeviceWaitIdle(device) == VK_SUCCESS)
+		return 0;
+
+	return -1;
+}
+
+struct Image {
+	VkImage image;
+	VmaAllocation allocation;
+};
+
+struct Buffer {
+	VkBuffer buffer;
+	VmaAllocation allocation;
+};
+
+struct AsyncLoader_T {
+	VkDevice device;
+	VmaAllocator allocator;
+	VkCommandPool commandPool;
+	mem::span<VkCommandBuffer> commandBuffer;
+	mem::span<VkSemaphore> semaphore;
+	mem::span<VkFence> fence;
+	Buffer stageBuffer;
+	rndr::TransferStage stage;
+};
+
+int createAsyncLoader(Emulator const _Emulator, const AsyncLoaderCreateInfo* const pCreateInfo, AsyncLoader* const pAsyncLoader) noexcept {
+	const VkDevice device = _Emulator->device;
+	
+	VmaAllocator _allocator = VK_NULL_HANDLE;
+	VkCommandPool _commandPool = VK_NULL_HANDLE;
+	mem::span<VkCommandBuffer> _commandBuffer;
+	mem::span<VkSemaphore> _sempahore;
+	mem::span<VkFence> _fence;
+	Buffer _stageBuffer{};
+
+	do {
+		VkResult result;
+
 		{
-			VkCommandPoolCreateInfo createInfo{};
-			createInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-			createInfo.pNext = nullptr;
-			createInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+			VmaAllocatorCreateInfo createInfo{};
+			createInfo.flags = 0;
+			createInfo.physicalDevice = _Emulator->physicalDevice;
+			createInfo.device = device;
+			createInfo.preferredLargeHeapBlockSize = 0;
+			createInfo.pAllocationCallbacks = nullptr;
+			createInfo.pDeviceMemoryCallbacks = nullptr;
+			createInfo.pHeapSizeLimit = nullptr;
+			createInfo.pVulkanFunctions = nullptr;
+			createInfo.instance = _Emulator->instance;
+			createInfo.vulkanApiVersion = VK_API_VERSION_1_3;
+			createInfo.pTypeExternalMemoryHandleTypes = nullptr;
 
-			createInfo.queueFamilyIndex = queueFamily.graphics;
-
-			result = vkCreateCommandPool(_device, &createInfo, nullptr, &_commandPool.graphics);
-
-			if (result != VK_SUCCESS)
-				break;
-
-			createInfo.queueFamilyIndex = queueFamily.transfer;
-				
-			result = vkCreateCommandPool(_device, &createInfo, nullptr, &_commandPool.transfer);
+			result = vmaCreateAllocator(&createInfo, &_allocator);
 		}
 
 		if (result != VK_SUCCESS)
 			break;
 
 		{
-			VmaAllocatorCreateInfo createInfo{};
-			createInfo.flags = 0;
-			createInfo.physicalDevice = physicalDevice;
-			createInfo.device = _device;
-			createInfo.preferredLargeHeapBlockSize = 0;
-			createInfo.pAllocationCallbacks = nullptr;
-			createInfo.pDeviceMemoryCallbacks = nullptr;
-			createInfo.pHeapSizeLimit = nullptr;
-			createInfo.pVulkanFunctions = nullptr;
-			createInfo.instance = _Context->instance;
-			createInfo.vulkanApiVersion = VK_API_VERSION_1_3;
-			createInfo.pTypeExternalMemoryHandleTypes = nullptr;
+			VkCommandPoolCreateInfo createInfo{};
+			createInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+			createInfo.pNext = nullptr;
+			createInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+			createInfo.queueFamilyIndex = _Emulator->queueFamily.transfer;
 
-			result = vmaCreateAllocator(&createInfo, &_allocator);
+			result = vkCreateCommandPool(device, &createInfo, nullptr, &_commandPool);
+		}
+
+		if (result != VK_SUCCESS)
+			break;
+
+		_commandBuffer = { new(std::nothrow) VkCommandBuffer[pCreateInfo->maxAsyncLoadRate], (size_t)pCreateInfo->maxAsyncLoadRate };
+
+		if (!_commandBuffer)
+			break;
+
+		{
+			VkCommandBufferAllocateInfo allocateInfo{};
+			allocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+			allocateInfo.pNext = nullptr;
+			allocateInfo.commandPool = _commandPool;
+			allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+			allocateInfo.commandBufferCount = pCreateInfo->maxAsyncLoadRate;
+			
+			result = vkAllocateCommandBuffers(device, &allocateInfo, _commandBuffer);
+		}
+
+		if (result != VK_SUCCESS)
+			break;
+
+		_sempahore = { new(std::nothrow) VkSemaphore[pCreateInfo->maxAsyncLoadRate], (size_t)pCreateInfo->maxAsyncLoadRate };
+
+		_sempahore.assign_default();
+
+		{
+			VkSemaphoreCreateInfo createInfo{};
+			createInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+			createInfo.pNext = nullptr;
+			createInfo.flags = 0;
+
+			const VkSemaphore* const pSemaphoreEnd = _sempahore.pEnd;
+			for(VkSemaphore* pSemaphore{ _sempahore.pBegin }; pSemaphore != pSemaphoreEnd && result == VK_SUCCESS; ++pSemaphore)
+				result = vkCreateSemaphore(device, &createInfo, nullptr, pSemaphore);
+		}
+
+		if (result != VK_SUCCESS)
+			break;
+
+		_fence = { new(std::nothrow) VkFence[pCreateInfo->maxAsyncLoadRate], (size_t)pCreateInfo->maxAsyncLoadRate };
+
+		if (!_fence)
+			break;
+
+		_fence.assign_default();
+
+		{
+			VkFenceCreateInfo createInfo{};
+			createInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+			createInfo.pNext = nullptr;
+			createInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+			const VkFence* const pFenceEnd = _fence.pEnd;
+			for (VkFence* pFence{ _fence.pBegin }; pFence != pFenceEnd && result == VK_SUCCESS; ++pFence)
+				result = vkCreateFence(device, &createInfo, nullptr, pFence);
 		}
 
 		if (result != VK_SUCCESS)
@@ -534,7 +630,7 @@ int createEmulator(VulkanContext const _Context, const RendererCreateInfo* const
 			createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 			createInfo.pNext = nullptr;
 			createInfo.flags = 0;
-			createInfo.size = VkDeviceSize(64) << 20;
+			createInfo.size = VkDeviceSize(pCreateInfo->stageSize);
 			createInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 			createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 			createInfo.queueFamilyIndexCount = 0;
@@ -551,8 +647,7 @@ int createEmulator(VulkanContext const _Context, const RendererCreateInfo* const
 			allocationCreateInfo.priority = 0.0f;
 
 			VmaAllocationInfo allocationInfo;
-
-			result = vmaCreateBuffer(_allocator, &createInfo, &allocationCreateInfo, &_stagingBuffer, &_stagingAllocation, &allocationInfo);
+			result = vmaCreateBuffer(_allocator, &createInfo, &allocationCreateInfo, &_stageBuffer.buffer, &_stageBuffer.allocation, &allocationInfo);
 
 			stagingSpan = mem::span<uint8_t>{ reinterpret_cast<uint8_t*>(allocationInfo.pMappedData), static_cast<size_t>(allocationInfo.size) };
 		}
@@ -560,34 +655,147 @@ int createEmulator(VulkanContext const _Context, const RendererCreateInfo* const
 		if (result != VK_SUCCESS)
 			break;
 			
+		AsyncLoader const loader = new(std::nothrow) AsyncLoader_T;
+
+		if (!loader)
+			break;
+
+		loader->stage = { stagingSpan };
+		loader->stageBuffer = _stageBuffer;
+		loader->fence = _fence;
+		loader->semaphore = _sempahore;
+		loader->commandBuffer = _commandBuffer;
+		loader->commandPool = _commandPool;
+		loader->allocator = _allocator;
+		loader->device = device;
+		
+		*pAsyncLoader = loader;
+
+		return 0;
+
+	} while (false);
+
+	if (_stageBuffer.buffer)
+		vmaDestroyBuffer(_allocator, _stageBuffer.buffer, _stageBuffer.allocation);
+
+	if (_fence) {
+		const VkFence* const pFenceEnd = _fence.pEnd;
+		for (const VkFence* pFence{ _fence.pBegin }; pFence != pFenceEnd && *pFence; ++pFence)
+			vkDestroyFence(device, *pFence, nullptr);
+
+		delete[] _fence;
+	}
+
+	if (_sempahore) {
+		const VkSemaphore* const pSemaphoreEnd = _sempahore.pEnd;
+		for (const VkSemaphore* pSemaphore{ _sempahore.pBegin }; pSemaphore != pSemaphoreEnd && *pSemaphore; ++pSemaphore)
+			vkDestroySemaphore(device, *pSemaphore, nullptr);
+
+		delete[] _sempahore;
+	}
+
+	if (_commandBuffer)
+		delete[] _commandBuffer;
+
+	if (_commandPool)
+		vkDestroyCommandPool(device, _commandPool, nullptr);
+
+	if (_allocator)
+		vmaDestroyAllocator(_allocator);
+
+	return -1;
+}
+
+void destroyAsyncLoader(AsyncLoader const _AsynLoader) noexcept {
+	vmaDestroyBuffer(_AsynLoader->allocator, _AsynLoader->stageBuffer.buffer, _AsynLoader->stageBuffer.allocation);
+
+	const VkFence* const pFenceEnd = _AsynLoader->fence.pEnd;
+	for (const VkFence* pFence{ _AsynLoader->fence.pBegin }; pFence != pFenceEnd; ++pFence)
+		vkDestroyFence(_AsynLoader->device, *pFence, nullptr);
+
+	delete[] _AsynLoader->fence;
+
+	const VkSemaphore* const pSemaphoreEnd = _AsynLoader->semaphore.pEnd;
+	for (const VkSemaphore* pSemaphore{ _AsynLoader->semaphore.pBegin }; pSemaphore != pSemaphoreEnd; ++pSemaphore)
+		vkDestroySemaphore(_AsynLoader->device, *pSemaphore, nullptr);
+
+	delete[] _AsynLoader->semaphore;
+
+	delete[] _AsynLoader->commandBuffer;
+	vkDestroyCommandPool(_AsynLoader->device, _AsynLoader->commandPool, nullptr);
+	
+	vmaDestroyAllocator(_AsynLoader->allocator);
+
+	delete _AsynLoader;
+}
+
+struct Canvas_T {
+	VkSurfaceKHR surface;
+	VkPhysicalDevice physicalDevice;
+	VkDevice device;
+
+	VkSurfaceFormatKHR surfaceFormat;
+	VkPresentModeKHR presentMode;
+
+	mem::span<VkClearValue> clearValue;
+	VkRenderPass renderPass;
+
+	VkExtent2D extent;
+	uint32_t layers;
+	VkSwapchainKHR swapchain;
+	mem::span<VkImage> image;
+	mem::span<VkImageView> imageView;
+
+	mem::span<VkFramebuffer> framebuffer;
+};
+
+int createCanvas(Emulator const _Emulator, const CanvasCreateInfo* const pCreateInfo, mem::stack* const pScratch, Canvas* const pCanvas) noexcept {
+	const VkSurfaceKHR surface = _Emulator->surface;
+	const VkPhysicalDevice physicalDevice = _Emulator->physicalDevice;
+	const VkDevice device = _Emulator->device;
+
+	mem::span<VkClearValue> _clearValue;
+	VkRenderPass _renderPass = VK_NULL_HANDLE;
+
+	VkSwapchainKHR _swapchain = VK_NULL_HANDLE;
+	mem::span<VkImage> _image;
+	mem::span<VkImageView> _imageView;
+
+	mem::span<VkFramebuffer> _framebuffer;
+
+	do {
+		VkResult result;
+
+		pScratch->mark();
+
 		VkSurfaceFormatKHR surfaceFormat;
 
 		{
-			constexpr std::array preferredSurfaceFormats{
-				VkSurfaceFormatKHR{ VK_FORMAT_B8G8R8A8_SRGB, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR },
-				VkSurfaceFormatKHR{ VK_FORMAT_R8G8B8A8_SRGB, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR },
-				VkSurfaceFormatKHR{ VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR },
-				VkSurfaceFormatKHR{ VK_FORMAT_R8G8B8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR }
+			constexpr VkSurfaceFormatKHR preferredSurfaceFormats[] {
+				{ VK_FORMAT_B8G8R8A8_SRGB, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR },
+				{ VK_FORMAT_R8G8B8A8_SRGB, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR },
+				{ VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR },
+				{ VK_FORMAT_R8G8B8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR }
 			};
 
 			uint32_t surfaceFormatCount;
 
-			result = vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, _surface, &surfaceFormatCount, nullptr);
+			result = vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &surfaceFormatCount, nullptr);
 
 			if (result != VK_SUCCESS)
 				break;
 
-			mem::span<VkSurfaceFormatKHR> surfaceFormats = mem::scratch.alloc<VkSurfaceFormatKHR>(surfaceFormatCount);
+			mem::span<VkSurfaceFormatKHR> surfaceFormats = pScratch->alloc<VkSurfaceFormatKHR>(surfaceFormatCount);
 
-			result = vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, _surface, &surfaceFormatCount, surfaceFormats);
+			result = vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &surfaceFormatCount, surfaceFormats);
 				
 			if (result != VK_SUCCESS)
 				break;
 
 			const VkSurfaceFormatKHR* pSurfaceFormat = nullptr;
 
-			const VkSurfaceFormatKHR* const pEnd = preferredSurfaceFormats.data() + preferredSurfaceFormats.size();
-			for (const VkSurfaceFormatKHR* pFormat{ preferredSurfaceFormats.data() }; pFormat != pEnd; ++pFormat) {
+			const VkSurfaceFormatKHR* const pFormatEnd = preferredSurfaceFormats + 4u;
+			for (const VkSurfaceFormatKHR* pFormat{ preferredSurfaceFormats }; pFormat != pFormatEnd; ++pFormat) {
 				pSurfaceFormat = std::find_if(surfaceFormats.pBegin, surfaceFormats.pEnd, [pFormat](const VkSurfaceFormatKHR& _Format) { return _Format.format == pFormat->format && _Format.colorSpace == pFormat->colorSpace; });
 
 				if (pSurfaceFormat != surfaceFormats.pEnd)
@@ -607,14 +815,14 @@ int createEmulator(VulkanContext const _Context, const RendererCreateInfo* const
 		{
 			uint32_t presentModeCount;
 
-			result = vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, _surface, &presentModeCount, nullptr);
+			result = vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, nullptr);
 
 			if (result != VK_SUCCESS)
 				break;
 
-			mem::span<VkPresentModeKHR> presentModes = mem::scratch.alloc<VkPresentModeKHR>(presentModeCount);
+			mem::span<VkPresentModeKHR> presentModes = pScratch->alloc<VkPresentModeKHR>(presentModeCount);
 
-			result = vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, _surface, &presentModeCount, presentModes);
+			result = vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, presentModes);
 
 			if (result != VK_SUCCESS)
 				break;
@@ -624,102 +832,13 @@ int createEmulator(VulkanContext const _Context, const RendererCreateInfo* const
 			presentMode = pPresentMode != presentModes.pEnd ? *pPresentMode : VK_PRESENT_MODE_FIFO_KHR;
 		}
 
-		VkSurfaceCapabilitiesKHR capabilities;
+		_clearValue = { new(std::nothrow) VkClearValue[1u], (size_t)1u };
 
-		result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, _surface, &capabilities);
-
-		if (result != VK_SUCCESS)
+		if (!_clearValue)
 			break;
 
-		uint32_t minImageCount;
-
-		{
-			constexpr uint32_t preferredImageCount = 2u;
-
-			minImageCount = preferredImageCount > capabilities.minImageCount ? preferredImageCount : capabilities.minImageCount;
-
-			if (capabilities.maxImageCount) {
-				minImageCount = minImageCount < capabilities.maxImageCount ? minImageCount : capabilities.maxImageCount;
-			}
-		}
-
-		{
-			VkSwapchainCreateInfoKHR createInfo{};
-			createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-			createInfo.pNext = nullptr;
-			createInfo.flags = 0;
-			createInfo.surface = _surface;
-			createInfo.minImageCount = minImageCount;
-			createInfo.imageFormat = surfaceFormat.format;
-			createInfo.imageColorSpace = surfaceFormat.colorSpace;
-			createInfo.imageExtent = capabilities.currentExtent;
-			createInfo.imageArrayLayers = 1u;
-			createInfo.imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-			createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-			createInfo.queueFamilyIndexCount = 0;
-			createInfo.pQueueFamilyIndices = nullptr;
-			createInfo.preTransform = capabilities.currentTransform;
-			createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-			createInfo.presentMode = presentMode;
-			createInfo.clipped = VK_TRUE;
-			createInfo.oldSwapchain = VK_NULL_HANDLE;
-
-			result = vkCreateSwapchainKHR(_device, &createInfo, nullptr, &_swapchain);
-		}
-
-		if (result != VK_SUCCESS)
-			break;
-
-		mem::span<VkImage> swapchainImage;
-
-		{
-			uint32_t swapchainImageCount;
-			
-			result = vkGetSwapchainImagesKHR(_device, _swapchain, &swapchainImageCount, nullptr);
-
-			if (result != VK_SUCCESS)
-				break;
-
-			swapchainImage = _stash.alloc<VkImage>(swapchainImageCount);
-
-			result = vkGetSwapchainImagesKHR(_device, _swapchain, &swapchainImageCount, swapchainImage);
-			
-			if (result != VK_SUCCESS)
-				break;
-
-			_swapchainImageView = _stash.alloc<VkImageView>(swapchainImageCount);
-
-			_swapchainImageView.assign_default();
-
-			VkImageViewCreateInfo createInfo{};
-			createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-			createInfo.pNext = nullptr;
-			createInfo.flags = 0;
-			createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-			createInfo.format = surfaceFormat.format;
-			createInfo.components.r = VK_COMPONENT_SWIZZLE_R;
-			createInfo.components.g = VK_COMPONENT_SWIZZLE_G;
-			createInfo.components.b = VK_COMPONENT_SWIZZLE_B;
-			createInfo.components.a = VK_COMPONENT_SWIZZLE_A;
-			createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			createInfo.subresourceRange.baseMipLevel = 0;
-			createInfo.subresourceRange.levelCount = 1;
-			createInfo.subresourceRange.baseArrayLayer = 0;
-			createInfo.subresourceRange.layerCount = 1;
-
-			for (uint32_t i = 0; i < swapchainImageCount; ++i) {
-				createInfo.image = swapchainImage[i];
-
-				result = vkCreateImageView(_device, &createInfo, nullptr, &_swapchainImageView[i]);
-
-				if (result != VK_SUCCESS)
-					break;
-			}
-		}
-
-		if (result != VK_SUCCESS)
-			break;
-
+		_clearValue[0] = {{{ 0.0f, 0.0f, 0.0f, 1.0f } }};
+		
 		{
 			VkAttachmentDescription attachment{};
 			attachment.format = surfaceFormat.format;
@@ -728,7 +847,7 @@ int createEmulator(VulkanContext const _Context, const RendererCreateInfo* const
 			attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 			attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 			attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-			attachment.initialLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+			attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 			attachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
 			VkAttachmentReference reference{};
@@ -767,11 +886,444 @@ int createEmulator(VulkanContext const _Context, const RendererCreateInfo* const
 			createInfo.dependencyCount = 1;
 			createInfo.pDependencies = &dependency;
 
-			result = vkCreateRenderPass(_device, &createInfo, nullptr, &_renderPass.composite);
+			result = vkCreateRenderPass(device, &createInfo, nullptr, &_renderPass);
 		}
 
 		if (result != VK_SUCCESS)
 			break;
+
+
+		VkSurfaceCapabilitiesKHR surfaceCapabilities;
+
+		result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &surfaceCapabilities);
+
+		if (result != VK_SUCCESS)
+			break;
+
+		uint32_t minImageCount = pCreateInfo->minImageCount;
+
+		{
+			minImageCount = std::max<uint32_t>(minImageCount, surfaceCapabilities.minImageCount);
+
+			if (surfaceCapabilities.maxImageCount)
+				minImageCount = std::min<uint32_t>(minImageCount, surfaceCapabilities.maxImageCount);
+		}
+
+		{
+			VkSwapchainCreateInfoKHR createInfo{};
+			createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+			createInfo.pNext = nullptr;
+			createInfo.flags = 0;
+			createInfo.surface = surface;
+			createInfo.minImageCount = minImageCount;
+			createInfo.imageFormat = surfaceFormat.format;
+			createInfo.imageColorSpace = surfaceFormat.colorSpace;
+			createInfo.imageExtent = surfaceCapabilities.currentExtent;
+			createInfo.imageArrayLayers = 1u;
+			createInfo.imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+			createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+			createInfo.queueFamilyIndexCount = 0;
+			createInfo.pQueueFamilyIndices = nullptr;
+			createInfo.preTransform = surfaceCapabilities.currentTransform;
+			createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+			createInfo.presentMode = presentMode;
+			createInfo.clipped = VK_TRUE;
+			createInfo.oldSwapchain = VK_NULL_HANDLE;
+
+			result = vkCreateSwapchainKHR(device, &createInfo, nullptr, &_swapchain);
+		}
+
+		if (result != VK_SUCCESS)
+			break;
+
+		uint32_t imageCount;
+			
+		result = vkGetSwapchainImagesKHR(device, _swapchain, &imageCount, nullptr);
+
+		if (result != VK_SUCCESS)
+			break;
+
+		_image = { new(std::nothrow) VkImage[imageCount], (size_t)imageCount };
+
+		if (!_image)
+			break;
+
+		result = vkGetSwapchainImagesKHR(device, _swapchain, &imageCount, _image);
+			
+		if (result != VK_SUCCESS)
+			break;
+
+		_imageView = { new(std::nothrow) VkImageView[imageCount], (size_t)imageCount };
+
+		if (!_imageView)
+			break;
+
+		_imageView.assign_default();
+
+		{
+			VkImageViewCreateInfo createInfo{};
+			createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+			createInfo.pNext = nullptr;
+			createInfo.flags = 0;
+			createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+			createInfo.format = surfaceFormat.format;
+			createInfo.components.r = VK_COMPONENT_SWIZZLE_R;
+			createInfo.components.g = VK_COMPONENT_SWIZZLE_G;
+			createInfo.components.b = VK_COMPONENT_SWIZZLE_B;
+			createInfo.components.a = VK_COMPONENT_SWIZZLE_A;
+			createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			createInfo.subresourceRange.baseMipLevel = 0;
+			createInfo.subresourceRange.levelCount = 1;
+			createInfo.subresourceRange.baseArrayLayer = 0;
+			createInfo.subresourceRange.layerCount = 1;
+
+			VkImageView* pImageView = _imageView.pBegin;
+
+			const VkImage* const pImageEnd = _image.pEnd;
+			for (const VkImage* pImage{ _image.pBegin }; pImage != pImageEnd && result == VK_SUCCESS; ++pImage) {
+				createInfo.image = *pImage;
+				result = vkCreateImageView(device, &createInfo, nullptr, pImageView++);
+			}
+		}
+
+		if (result != VK_SUCCESS)
+			break;
+
+		_framebuffer = { new(std::nothrow) VkFramebuffer[imageCount], (size_t)imageCount };
+
+		if (!_framebuffer)
+			break;
+
+		_framebuffer.assign_default();
+
+		{
+			VkFramebufferCreateInfo createInfo{};
+			createInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+			createInfo.pNext = nullptr;
+			createInfo.flags = 0;
+			createInfo.renderPass = _renderPass;
+			createInfo.attachmentCount = 1u;
+			createInfo.width = surfaceCapabilities.currentExtent.width;
+			createInfo.height = surfaceCapabilities.currentExtent.height;
+			createInfo.layers = 1u;
+
+			const VkImageView* pImageView = _imageView.pBegin;
+
+			const VkFramebuffer* const pFramebufferEnd = _framebuffer.pEnd;
+			for (VkFramebuffer* pFramebuffer{ _framebuffer.pBegin }; pFramebuffer != pFramebufferEnd && result == VK_SUCCESS; ++pFramebuffer) {
+				createInfo.pAttachments = pImageView++;
+
+				result = vkCreateFramebuffer(device, &createInfo, nullptr, pFramebuffer);
+			}
+		}
+
+		if (result != VK_SUCCESS)
+			break;
+
+		Canvas const canvas = new(std::nothrow) Canvas_T;
+
+		if (!canvas)
+			break;
+
+		pScratch->restore();
+
+		canvas->framebuffer = _framebuffer;
+
+		canvas->imageView = _imageView;
+		canvas->image = _image;
+		canvas->swapchain = _swapchain;
+		canvas->layers = 1u;
+		canvas->extent = surfaceCapabilities.currentExtent;
+		
+		canvas->renderPass = _renderPass;
+		canvas->clearValue = _clearValue;
+
+		canvas->presentMode = presentMode;
+		canvas->surfaceFormat = surfaceFormat;
+
+		canvas->device = device;
+		canvas->physicalDevice = physicalDevice;
+		canvas->surface = surface;
+
+		*pCanvas = canvas;
+
+		return 0;
+
+	} while (false);
+
+	pScratch->restore();
+
+	if (_framebuffer) {
+		const VkFramebuffer* const pFramebufferEnd = _framebuffer.pEnd;
+		for (const VkFramebuffer* pFramebuffer{ _framebuffer.pBegin }; pFramebuffer != pFramebufferEnd && *pFramebuffer; ++pFramebuffer)
+			vkDestroyFramebuffer(device, *pFramebuffer, nullptr);
+
+		delete[] _framebuffer;
+	}
+
+	if (_imageView) {
+		const VkImageView* const pImageViewEnd = _imageView.pEnd;
+		for (const VkImageView* pImageView{ _imageView.pBegin }; pImageView != pImageViewEnd && *pImageView; ++pImageView)
+			vkDestroyImageView(device, *pImageView, nullptr);
+
+		delete[] _imageView;
+	}
+
+	if (_image)
+		delete[] _image;
+
+	if (_swapchain)
+		vkDestroySwapchainKHR(device, _swapchain, nullptr);
+
+	if (_renderPass)
+		vkDestroyRenderPass(device, _renderPass, nullptr);
+
+	if (_clearValue)
+		delete[] _clearValue;
+
+	return -1;
+}
+
+void destroyCanvas(Canvas const _Canvas) noexcept {
+	const VkDevice device = _Canvas->device;
+
+	const VkFramebuffer* const pFramebufferEnd = _Canvas->framebuffer.pEnd;
+	for (const VkFramebuffer* pFramebuffer{ _Canvas->framebuffer.pBegin }; pFramebuffer != pFramebufferEnd; ++pFramebuffer)
+		vkDestroyFramebuffer(device, *pFramebuffer, nullptr);
+
+	delete[] _Canvas->framebuffer;
+	
+	const VkImageView* const pImageViewEnd = _Canvas->imageView.pEnd;
+	for (const VkImageView* pImageView{ _Canvas->imageView.pBegin }; pImageView != pImageViewEnd; ++pImageView)
+		vkDestroyImageView(device, *pImageView, nullptr);
+
+	delete[] _Canvas->imageView;
+	delete[] _Canvas->image;
+
+	vkDestroySwapchainKHR(device, _Canvas->swapchain, nullptr);
+
+	vkDestroyRenderPass(device, _Canvas->renderPass, nullptr);
+	delete[] _Canvas->clearValue;
+
+	delete _Canvas;
+}
+
+int updateCanvas(Canvas const _Canvas) noexcept {
+	const VkSurfaceKHR surface = _Canvas->surface;
+	const VkPhysicalDevice physicalDevice = _Canvas->physicalDevice;
+	const VkDevice device = _Canvas->device;
+
+	VkSwapchainKHR _swapchain = VK_NULL_HANDLE;
+	mem::span<VkImage> _image;
+	mem::span<VkImageView> _imageView;
+
+	mem::span<VkFramebuffer> _framebuffer;
+
+	do {
+		VkResult result;
+		
+		VkSurfaceCapabilitiesKHR surfaceCapabilities;
+
+		result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &surfaceCapabilities);
+
+		if (result != VK_SUCCESS)
+			break;
+
+		uint32_t minImageCount = static_cast<uint32_t>(_Canvas->image.size());
+
+		{
+			minImageCount = std::max<uint32_t>(minImageCount, surfaceCapabilities.minImageCount);
+
+			if (surfaceCapabilities.maxImageCount)
+				minImageCount = std::min<uint32_t>(minImageCount, surfaceCapabilities.maxImageCount);
+		}
+
+		{
+			VkSwapchainCreateInfoKHR createInfo{};
+			createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+			createInfo.pNext = nullptr;
+			createInfo.flags = 0;
+			createInfo.surface = surface;
+			createInfo.minImageCount = minImageCount;
+			createInfo.imageFormat = _Canvas->surfaceFormat.format;
+			createInfo.imageColorSpace = _Canvas->surfaceFormat.colorSpace;
+			createInfo.imageExtent = surfaceCapabilities.currentExtent;
+			createInfo.imageArrayLayers = 1u;
+			createInfo.imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+			createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+			createInfo.queueFamilyIndexCount = 0;
+			createInfo.pQueueFamilyIndices = nullptr;
+			createInfo.preTransform = surfaceCapabilities.currentTransform;
+			createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+			createInfo.presentMode = _Canvas->presentMode;
+			createInfo.clipped = VK_TRUE;
+			createInfo.oldSwapchain = _Canvas->swapchain;
+
+			result = vkCreateSwapchainKHR(device, &createInfo, nullptr, &_swapchain);
+		}
+
+		if (result != VK_SUCCESS)
+			break;
+
+		uint32_t imageCount;
+		
+		result = vkGetSwapchainImagesKHR(device, _swapchain, &imageCount, nullptr);
+
+		if (result != VK_SUCCESS)
+			break;
+
+		_image = { new(std::nothrow) VkImage[imageCount], (size_t)imageCount };
+
+		if (!_image)
+			break;
+
+		result = vkGetSwapchainImagesKHR(device, _swapchain, &imageCount, _image);
+
+		if (result != VK_SUCCESS)
+			break;
+
+		_imageView = { new(std::nothrow) VkImageView[imageCount], (size_t)imageCount };
+
+		if (!_imageView)
+			break;
+
+		_imageView.assign_default();
+
+		{
+			VkImageViewCreateInfo createInfo{};
+			createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+			createInfo.pNext = nullptr;
+			createInfo.flags = 0;
+			createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+			createInfo.format = _Canvas->surfaceFormat.format;
+			createInfo.components.r = VK_COMPONENT_SWIZZLE_R;
+			createInfo.components.g = VK_COMPONENT_SWIZZLE_G;
+			createInfo.components.b = VK_COMPONENT_SWIZZLE_B;
+			createInfo.components.a = VK_COMPONENT_SWIZZLE_A;
+			createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			createInfo.subresourceRange.baseMipLevel = 0;
+			createInfo.subresourceRange.levelCount = 1;
+			createInfo.subresourceRange.baseArrayLayer = 0;
+			createInfo.subresourceRange.layerCount = 1;
+
+			VkImageView* pImageView = _imageView;
+
+			const VkImage* const pImageEnd = _image.pEnd;
+			for (const VkImage* pImage{ _image.pBegin }; pImage != pImageEnd && result == VK_SUCCESS; ++pImage){
+				createInfo.image = *pImage;
+				result = vkCreateImageView(device, &createInfo, nullptr, pImageView++);
+			}
+		}
+
+		if (result != VK_SUCCESS)
+			break;
+
+		_framebuffer = { new(std::nothrow) VkFramebuffer[imageCount], (size_t)imageCount };
+		
+		if (!_framebuffer)
+			break;
+
+		_framebuffer.assign_default();
+
+		{
+			VkFramebufferCreateInfo createInfo{};
+			createInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+			createInfo.pNext = nullptr;
+			createInfo.flags = 0;
+			createInfo.renderPass = _Canvas->renderPass;
+			createInfo.attachmentCount = 1u;
+			createInfo.width = surfaceCapabilities.currentExtent.width;
+			createInfo.height = surfaceCapabilities.currentExtent.height;
+			createInfo.layers = 1u;
+
+			const VkImageView* pImageView = _imageView.pBegin;
+
+			const VkFramebuffer* const pFramebufferEnd = _framebuffer.pEnd;
+			for (VkFramebuffer* pFramebuffer{ _framebuffer.pBegin }; pFramebuffer != pFramebufferEnd && result == VK_SUCCESS; ++pFramebuffer) {
+				createInfo.pAttachments = pImageView++;
+
+				result = vkCreateFramebuffer(device, &createInfo, nullptr, pFramebuffer);
+			}
+		}
+
+		if (result != VK_SUCCESS)
+			break;
+
+		result = vkDeviceWaitIdle(device);
+
+		if (result != VK_SUCCESS)
+			break;
+
+		const VkFramebuffer* const pFramebufferEnd = _Canvas->framebuffer.pEnd;
+		for (const VkFramebuffer* pFramebuffer{ _Canvas->framebuffer.pBegin }; pFramebuffer != pFramebufferEnd; ++pFramebuffer)
+			vkDestroyFramebuffer(device, *pFramebuffer, nullptr);
+
+		delete[] _Canvas->framebuffer;
+			
+		const VkImageView* const pImageViewEnd = _Canvas->imageView.pEnd;
+		for (const VkImageView* pImageView{ _Canvas->imageView.pBegin }; pImageView != pImageViewEnd; ++pImageView)
+			vkDestroyImageView(device, *pImageView, nullptr);
+
+		delete[] _Canvas->imageView;
+		delete[] _Canvas->image;
+
+		vkDestroySwapchainKHR(device, _Canvas->swapchain, nullptr);
+
+		_Canvas->framebuffer = _framebuffer;
+		_Canvas->imageView = _imageView;
+		_Canvas->image = _image;
+		_Canvas->swapchain = _swapchain;
+		_Canvas->layers = 1u;
+		_Canvas->extent = surfaceCapabilities.currentExtent;
+
+		return 0;
+
+	} while (false);
+
+	if (_framebuffer) {
+		const VkFramebuffer* const pFramebufferEnd = _framebuffer.pEnd;
+		for (const VkFramebuffer* pFramebuffer{ _framebuffer.pBegin }; pFramebuffer != pFramebufferEnd && *pFramebuffer; ++pFramebuffer)
+			vkDestroyFramebuffer(device, *pFramebuffer, nullptr);
+
+		delete[] _framebuffer;
+	}
+
+	if (_imageView) {
+		const VkImageView* const pImageViewEnd = _imageView.pEnd;
+		for (const VkImageView* pImageView{ _imageView.pBegin }; pImageView != pImageViewEnd && *pImageView; ++pImageView)
+			vkDestroyImageView(device, *pImageView, nullptr);
+
+		delete[] _imageView;
+	}
+
+	if (_image)
+		delete[] _image;
+
+	if (_swapchain)
+		vkDestroySwapchainKHR(device, _swapchain, nullptr);
+
+	return -1;
+}
+
+struct RenderBox_T {
+	VkDevice device;
+
+	VkSampler sampler;
+	VkDescriptorSetLayout descriptorSetLayout;
+	VkPipelineLayout pipelineLayout;
+	VkPipeline pipeline;
+};
+
+int createRenderBox(Emulator const _Emulator, Canvas const _Canvas, mem::stack* const pScratch, RenderBox* const pRenderBox) noexcept {
+	const VkDevice device = _Emulator->device;
+
+	VkSampler _sampler = VK_NULL_HANDLE;
+	VkDescriptorSetLayout _descriptorSetLayout = VK_NULL_HANDLE;
+	VkPipelineLayout _pipelineLayout = VK_NULL_HANDLE;
+	VkPipeline _pipeline = VK_NULL_HANDLE;
+
+	do {
+		VkResult result;
 
 		{
 			VkSamplerCreateInfo createInfo{};
@@ -793,7 +1345,7 @@ int createEmulator(VulkanContext const _Context, const RendererCreateInfo* const
 			createInfo.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
 			createInfo.unnormalizedCoordinates = VK_FALSE;
 
-			result = vkCreateSampler(_device, &createInfo, nullptr, &_sampler.raw);
+			result = vkCreateSampler(device, &createInfo, nullptr, &_sampler);
 		}
 
 		if (result != VK_SUCCESS)
@@ -805,16 +1357,16 @@ int createEmulator(VulkanContext const _Context, const RendererCreateInfo* const
 			binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 			binding.descriptorCount = 1;
 			binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-			binding.pImmutableSamplers = &_sampler.raw;
+			binding.pImmutableSamplers = &_sampler;
 
 			VkDescriptorSetLayoutCreateInfo createInfo{};
 			createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 			createInfo.pNext = nullptr;
 			createInfo.flags = 0;
-			createInfo.bindingCount = 1;
+			createInfo.bindingCount = 1u;
 			createInfo.pBindings = &binding;
 
-			result = vkCreateDescriptorSetLayout(_device, &createInfo, nullptr, &_descriptorSetLayout.imageRead);
+			result = vkCreateDescriptorSetLayout(device, &createInfo, nullptr, &_descriptorSetLayout);
 		}
 
 		if (result != VK_SUCCESS)
@@ -826,11 +1378,11 @@ int createEmulator(VulkanContext const _Context, const RendererCreateInfo* const
 			createInfo.pNext = nullptr;
 			createInfo.flags = 0;
 			createInfo.setLayoutCount = 1;
-			createInfo.pSetLayouts = &_descriptorSetLayout.imageRead;
+			createInfo.pSetLayouts = &_descriptorSetLayout;
 			createInfo.pushConstantRangeCount = 0;
 			createInfo.pPushConstantRanges = nullptr;
 
-			result = vkCreatePipelineLayout(_device, &createInfo, nullptr, &_pipelineLayout.composite);
+			result = vkCreatePipelineLayout(device, &createInfo, nullptr, &_pipelineLayout);
 		}
 
 		if (result != VK_SUCCESS)
@@ -840,7 +1392,7 @@ int createEmulator(VulkanContext const _Context, const RendererCreateInfo* const
 			VkShaderModule vertex;
 
 			{
-				const char* const vertPath = "shaders/presentation.vert.spv";
+				const char* const vertPath = "shaders/base.vert.spv";
 
 				size_t size;
 
@@ -849,9 +1401,9 @@ int createEmulator(VulkanContext const _Context, const RendererCreateInfo* const
 				if (error)
 					break;
 
-				mem::scratch.mark();
+				pScratch->mark();
 
-				mem::span<uint8_t> bin = mem::scratch.alloc<uint8_t>(size);
+				mem::span<uint8_t> bin = pScratch->alloc<uint8_t>(size);
 
 				error = io::loadBinary(vertPath, size, bin);
 
@@ -865,9 +1417,9 @@ int createEmulator(VulkanContext const _Context, const RendererCreateInfo* const
 				createInfo.codeSize = size;
 				createInfo.pCode = reinterpret_cast<const uint32_t*>(bin.pBegin);
 
-				result = vkCreateShaderModule(_device, &createInfo, nullptr, &vertex);
+				result = vkCreateShaderModule(device, &createInfo, nullptr, &vertex);
 
-				mem::scratch.restore();
+				pScratch->restore();
 			}
 
 			if (result != VK_SUCCESS)
@@ -876,25 +1428,25 @@ int createEmulator(VulkanContext const _Context, const RendererCreateInfo* const
 			VkShaderModule fragment;
 
 			{
-				const char* const fragPath = "shaders/presentation.frag.spv";
+				const char* const fragPath = "shaders/base.frag.spv";
 
 				size_t size;
 
 				int error = io::getBinarySize(fragPath, &size);
 
 				if (error) {
-					vkDestroyShaderModule(_device, vertex, nullptr);
+					vkDestroyShaderModule(device, vertex, nullptr);
 					break;
 				}
 
-				mem::scratch.mark();
+				pScratch->mark();
 
-				mem::span<uint8_t> bin = mem::scratch.alloc<uint8_t>(size);
+				mem::span<uint8_t> bin = pScratch->alloc<uint8_t>(size);
 
 				error = io::loadBinary(fragPath, size, bin);
 
 				if (error) {
-					vkDestroyShaderModule(_device, vertex, nullptr);
+					vkDestroyShaderModule(device, vertex, nullptr);
 					break;
 				}
 
@@ -905,13 +1457,13 @@ int createEmulator(VulkanContext const _Context, const RendererCreateInfo* const
 				createInfo.codeSize = size;
 				createInfo.pCode = reinterpret_cast<const uint32_t*>(bin.pBegin);
 
-				result = vkCreateShaderModule(_device, &createInfo, nullptr, &fragment);
+				result = vkCreateShaderModule(device, &createInfo, nullptr, &fragment);
 
-				mem::scratch.restore();
+				pScratch->restore();
 			}
 
 			if (result != VK_SUCCESS) {
-				vkDestroyShaderModule(_device, vertex, nullptr);
+				vkDestroyShaderModule(device, vertex, nullptr);
 				break;
 			}
 
@@ -931,6 +1483,13 @@ int createEmulator(VulkanContext const _Context, const RendererCreateInfo* const
 			stageInfo[1].module = fragment;
 			stageInfo[1].pName = "main";
 			stageInfo[1].pSpecializationInfo = nullptr;
+
+			VkVertexInputBindingDescription bindings = { 0, sizeof(Vertex::_2D), VK_VERTEX_INPUT_RATE_VERTEX };
+			std::array<VkVertexInputAttributeDescription, 3> attributes = { {
+				{0, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex::_2D, position)},
+				{1, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex::_2D, uv)},
+				{2, 0, VK_FORMAT_R8G8B8A8_UNORM, offsetof(Vertex::_2D, color)}
+			} };
 				
 			VkPipelineVertexInputStateCreateInfo vertexInputState{};
 			vertexInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -1053,55 +1612,132 @@ int createEmulator(VulkanContext const _Context, const RendererCreateInfo* const
 			createInfo.pDepthStencilState = &depthStencilState;
 			createInfo.pColorBlendState = &colorBlendState;
 			createInfo.pDynamicState = &dynamicState;
-			createInfo.layout = _pipelineLayout.composite;
-			createInfo.renderPass = _renderPass.composite;
+			createInfo.layout = _pipelineLayout;
+			createInfo.renderPass = _Canvas->renderPass;
 			createInfo.subpass = 0;
 			createInfo.basePipelineHandle = VK_NULL_HANDLE;
 			createInfo.basePipelineIndex = 0;
 
-			result = vkCreateGraphicsPipelines(_device, VK_NULL_HANDLE, 1, &createInfo, nullptr, &_pipeline.composite);
+			result = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &createInfo, nullptr, &_pipeline);
 
-			vkDestroyShaderModule(_device, fragment, nullptr);
-			vkDestroyShaderModule(_device, vertex, nullptr);
+			vkDestroyShaderModule(device, fragment, nullptr);
+			vkDestroyShaderModule(device, vertex, nullptr);
 		}
 
 		if (result != VK_SUCCESS)
 			break;
 
-		{
-			VkDescriptorPoolSize poolSize{};
-			poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-			poolSize.descriptorCount = 1;
+		RenderBox const renderBox = new(std::nothrow) RenderBox_T;
 
-			VkDescriptorPoolCreateInfo createInfo{};
-			createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+		if (!renderBox)
+			break;
+
+		renderBox->pipeline = _pipeline;
+		renderBox->pipelineLayout = _pipelineLayout;
+		renderBox->descriptorSetLayout = _descriptorSetLayout;
+		renderBox->sampler = _sampler;
+
+		renderBox->device = device;
+
+		*pRenderBox = renderBox;
+
+		return 0;
+
+	} while (false);
+
+	if (_pipeline)
+		vkDestroyPipeline(device, _pipeline, nullptr);
+
+	if (_pipelineLayout)
+		vkDestroyPipelineLayout(device, _pipelineLayout, nullptr);
+
+	if (_descriptorSetLayout)
+		vkDestroyDescriptorSetLayout(device, _descriptorSetLayout, nullptr);
+
+	if (_sampler)
+		vkDestroySampler(device, _sampler, nullptr);
+
+	return -1;
+}
+
+void destroyRenderBox(RenderBox const _RenderBox) noexcept {
+	const VkDevice device = _RenderBox->device;
+
+	vkDestroyPipeline(device, _RenderBox->pipeline, nullptr);
+	vkDestroyPipelineLayout(device, _RenderBox->pipelineLayout, nullptr);
+	vkDestroyDescriptorSetLayout(device, _RenderBox->descriptorSetLayout, nullptr);
+	vkDestroySampler(device, _RenderBox->sampler, nullptr);
+
+	delete _RenderBox;
+}
+
+struct Renderer_T {
+	VkDevice device;
+	VkQueue graphics;
+	VkQueue present;
+
+	VkCommandPool commandPool;
+	mem::span<VkCommandBuffer> commandBuffer;
+	mem::span<VkSemaphore> imageSemaphore;
+	mem::span<VkSemaphore> renderSemaphore;
+	mem::span<VkFence> frameFence;
+	mem::span<VkFence> imageFence;
+	
+	uint32_t bufferedFrames;
+	uint32_t frame;
+};
+
+int createRenderer(Emulator const _Emulator, Canvas const _Canvas, RenderBox const _RenderBox, const RendererCreateInfo* const pCreateInfo, Renderer* const pRenderer) noexcept {
+	const VkDevice device = _Emulator->device;
+
+	VkCommandPool _commandPool = VK_NULL_HANDLE;
+	mem::span<VkCommandBuffer> _commandBuffer;
+	mem::span<VkSemaphore> _imageSemaphore;
+	mem::span<VkSemaphore> _renderSemaphore;
+	mem::span<VkFence> _frameFence;
+	mem::span<VkFence> _imageFence;
+
+	do {
+		VkResult result;
+		
+		{
+			VkCommandPoolCreateInfo createInfo{};
+			createInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
 			createInfo.pNext = nullptr;
-			createInfo.flags = 0;
-			createInfo.maxSets = 1;
-			createInfo.poolSizeCount = 1;
-			createInfo.pPoolSizes = &poolSize;
+			createInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+			createInfo.queueFamilyIndex = _Emulator->queueFamily.graphics;
 
-			result = vkCreateDescriptorPool(_device, &createInfo, nullptr, &_descriptorPool);
+			result = vkCreateCommandPool(device, &createInfo, nullptr, &_commandPool);
 		}
 
 		if (result != VK_SUCCESS)
 			break;
 
-		VkDescriptorSet descriptorSet;
+		_commandBuffer = { new(std::nothrow) VkCommandBuffer[pCreateInfo->maxFrameBuffering], (size_t)pCreateInfo->maxFrameBuffering };
+
+		if (!_commandBuffer)
+			break;
 
 		{
-			VkDescriptorSetAllocateInfo allocateInfo{};
-			allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+			VkCommandBufferAllocateInfo allocateInfo{};
+			allocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 			allocateInfo.pNext = nullptr;
-			allocateInfo.descriptorPool = _descriptorPool;
-			allocateInfo.descriptorSetCount = 1;
-			allocateInfo.pSetLayouts = &_descriptorSetLayout.imageRead;
+			allocateInfo.commandPool = _commandPool;
+			allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+			allocateInfo.commandBufferCount = pCreateInfo->maxFrameBuffering;
 
-			result = vkAllocateDescriptorSets(_device, &allocateInfo, &descriptorSet);
+			result = vkAllocateCommandBuffers(device, &allocateInfo, _commandBuffer);
 		}
 
 		if (result != VK_SUCCESS)
 			break;
+
+		_imageSemaphore = { new(std::nothrow) VkSemaphore[pCreateInfo->maxFrameBuffering], (size_t)pCreateInfo->maxFrameBuffering };
+
+		if (!_imageSemaphore)
+			break;
+
+		_imageSemaphore.assign_default();
 
 		{
 			VkSemaphoreCreateInfo createInfo{};
@@ -1109,15 +1745,40 @@ int createEmulator(VulkanContext const _Context, const RendererCreateInfo* const
 			createInfo.pNext = nullptr;
 			createInfo.flags = 0;
 
-			result = vkCreateSemaphore(_device, &createInfo, nullptr, &_semaphore.imageAvailable);
+			const VkSemaphore* const pSemaphoreEnd = _imageSemaphore.pEnd;
+			for (VkSemaphore* pSemaphore{ _imageSemaphore.pBegin }; pSemaphore != pSemaphoreEnd && result == VK_SUCCESS; ++pSemaphore)
+				result = vkCreateSemaphore(device, &createInfo, nullptr, pSemaphore);
+		}		
 
-			if (result != VK_SUCCESS)
-					break;
+		if (result != VK_SUCCESS)
+			break;
 
-			result = vkCreateSemaphore(_device, &createInfo, nullptr, &_semaphore.transferComplete);
+		const size_t swapchainImageCount = _Canvas->image.size();
+
+		_renderSemaphore = { new(std::nothrow) VkSemaphore[swapchainImageCount], swapchainImageCount };
+
+		if (!_renderSemaphore)
+			break;
+
+		_renderSemaphore.assign_default();
+
+		{
+			VkSemaphoreCreateInfo createInfo{};
+			createInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+			createInfo.pNext = nullptr;
+			createInfo.flags = 0;
+
+			const VkSemaphore* const pSemaphoreEnd = _renderSemaphore.pEnd;
+			for (VkSemaphore* pSemaphore{ _renderSemaphore.pBegin }; pSemaphore != pSemaphoreEnd && result == VK_SUCCESS; ++pSemaphore)
+				result = vkCreateSemaphore(device, &createInfo, nullptr, pSemaphore);
 		}
 
 		if (result != VK_SUCCESS)
+			break;
+
+		_frameFence = { new(std::nothrow) VkFence[pCreateInfo->maxFrameBuffering], (size_t)pCreateInfo->maxFrameBuffering };		
+
+		if (!_frameFence)
 			break;
 
 		{
@@ -1126,171 +1787,312 @@ int createEmulator(VulkanContext const _Context, const RendererCreateInfo* const
 			createInfo.pNext = nullptr;
 			createInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-			result = vkCreateFence(_device, &createInfo, nullptr, &_fence);
+			const VkFence* const pFenceEnd = _frameFence.pEnd;
+			for (VkFence* pFence{ _frameFence.pBegin }; pFence != pFenceEnd && result == VK_SUCCESS; ++pFence)
+				result = vkCreateFence(device, &createInfo, nullptr, pFence);
 		}
 
 		if (result != VK_SUCCESS)
 			break;
 
-		Emulator emulator = new(std::nothrow) Emulator_T;
+		_imageFence = { new(std::nothrow) VkFence[swapchainImageCount], swapchainImageCount };
+		
+		if (!_imageFence)
+			break;
 
-		emulator->emulatorBase = _stash.mark();
-		emulator->stash = std::move(_stash);
+		_imageFence.assign_default();
 
-		emulator->surface = _surface;
-		emulator->device = _device;
-		emulator->queueFamily = queueFamily;
-		emulator->queue = deviceQueue;
-		emulator->commandPool = _commandPool;
-		emulator->allocator = _allocator;
-		emulator->stagingBuffer = _stagingBuffer;
-		emulator->stagingAllocation = _stagingAllocation;
-		emulator->transferStage = rndr::TransferStage(stagingSpan);
-		emulator->swapchain = _swapchain;
-		emulator->surfaceFormat = surfaceFormat;
-		emulator->presentMode = presentMode;
-		emulator->swapchainImages = swapchainImage;
-		emulator->swapchainImageView = _swapchainImageView;
-		emulator->renderPass = _renderPass;
-		emulator->sampler = _sampler;
-		emulator->descriptorSetLayout = _descriptorSetLayout;
-		emulator->pipelineLayout = _pipelineLayout;
-		emulator->pipeline = _pipeline;
+		Renderer const renderer = new(std::nothrow) Renderer_T;
 
-		emulator->descriptorPool = _descriptorPool;
-		emulator->descriptorSet = descriptorSet;
+		if (!renderer)
+			break;
+		
+		renderer->frame = 0;
+		renderer->bufferedFrames = pCreateInfo->maxFrameBuffering;
 
-		emulator->semaphore = _semaphore;
-		emulator->fence = _fence;
+		renderer->imageFence = _imageFence;
+		renderer->frameFence = _frameFence;
+		renderer->renderSemaphore = _renderSemaphore;
+		renderer->imageSemaphore = _imageSemaphore;
+		renderer->commandBuffer = _commandBuffer;
+		renderer->commandPool = _commandPool;
 
-		*pEmulator = emulator;
+		renderer->present = _Emulator->queue.present;
+		renderer->graphics = _Emulator->queue.graphics;
+		renderer->device = device;
 
-		mem::scratch.restore();
+		*pRenderer = renderer;
 
 		return 0;
 
 	} while (false);
 
-	if (_fence)
-		vkDestroyFence(_device, _fence, nullptr);
+	if (_imageFence)
+		delete[] _imageFence;
 
-	if (_semaphore.transferComplete)
-		vkDestroySemaphore(_device, _semaphore.transferComplete, nullptr);
-	
-	if (_semaphore.imageAvailable)
-		vkDestroySemaphore(_device, _semaphore.imageAvailable, nullptr);
+	if (_frameFence) {
+		const VkFence* const pFenceEnd = _frameFence.pEnd;
+		for (const VkFence* pFence{ _frameFence.pBegin }; pFence != pFenceEnd && *pFence; ++pFence)
+			vkDestroyFence(device, *pFence, nullptr);
 
-	if (_descriptorPool)
-		vkDestroyDescriptorPool(_device, _descriptorPool, nullptr);
-
-	if (_pipeline.composite)
-		vkDestroyPipeline(_device, _pipeline.composite, nullptr);
-
-	if (_pipelineLayout.composite)
-		vkDestroyPipelineLayout(_device, _pipelineLayout.composite, nullptr);
-
-	if (_descriptorSetLayout.imageRead)
-		vkDestroyDescriptorSetLayout(_device, _descriptorSetLayout.imageRead, nullptr);
-
-	if (_sampler.raw)
-		vkDestroySampler(_device, _sampler.raw, nullptr);
-
-	if (_renderPass.composite)
-		vkDestroyRenderPass(_device, _renderPass.composite, nullptr);
-
-	for (const VkImageView* pImageView{_swapchainImageView.pBegin}; pImageView != _swapchainImageView.pEnd; ++pImageView) {
-		if (!*pImageView)
-			break;
-
-		vkDestroyImageView(_device, *pImageView, nullptr);
+		delete[] _frameFence;
 	}
 
-	if (_swapchain)
-		vkDestroySwapchainKHR(_device, _swapchain, nullptr);
+	if (_renderSemaphore) {
+		const VkSemaphore* const pSemaphoreEnd = _renderSemaphore.pEnd;
+		for (const VkSemaphore* pSemaphore{ _renderSemaphore.pBegin }; pSemaphore != pSemaphoreEnd && *pSemaphore; ++pSemaphore)
+			vkDestroySemaphore(device, *pSemaphore, nullptr);
 
-	if (_stagingBuffer)
-		vmaDestroyBuffer(_allocator, _stagingBuffer, _stagingAllocation);
+		delete[] _renderSemaphore;
+	}
 
-	if (_allocator)
-		vmaDestroyAllocator(_allocator);
+	if (_imageSemaphore) {
+		const VkSemaphore* const pSemaphoreEnd = _imageSemaphore.pEnd;
+		for (const VkSemaphore* pSemaphore{ _imageSemaphore.pEnd }; pSemaphore != pSemaphoreEnd && *pSemaphore; ++pSemaphore)
+			vkDestroySemaphore(device, *pSemaphore, nullptr);
 
-	if (_commandPool.transfer)
-		vkDestroyCommandPool(_device, _commandPool.transfer, nullptr);
+		delete[] _imageSemaphore;
+	}
 
-	if (_commandPool.graphics)
-		vkDestroyCommandPool(_device, _commandPool.graphics, nullptr);
+	if (_commandBuffer)
+		delete[] _commandBuffer;
 
-	if (_device)
-		vkDestroyDevice(_device, nullptr);
-
-	if (_surface)
-		vkDestroySurfaceKHR(_Context->instance, _surface, nullptr);
-
-	mem::scratch.restore();
+	if (_commandPool)
+		vkDestroyCommandPool(device, _commandPool, nullptr);
 
 	return -1;
 }
 
-void purgeEmulator(VulkanContext const _Context, Emulator const _Emulator) noexcept {
-	vkDestroyFence(_Emulator->device, _Emulator->fence, nullptr);
+void destroyRenderer(Renderer const _Renderer) noexcept {
+	const VkDevice device = _Renderer->device;
 
-	vkDestroySemaphore(_Emulator->device, _Emulator->semaphore.transferComplete, nullptr);
-	vkDestroySemaphore(_Emulator->device, _Emulator->semaphore.imageAvailable, nullptr);
+	delete[] _Renderer->imageFence;
 
-	vkDestroyDescriptorPool(_Emulator->device, _Emulator->descriptorPool, nullptr);
+	const VkFence* const pFenceEnd = _Renderer->frameFence.pEnd;
+	for (const VkFence* pFence{ _Renderer->frameFence.pBegin }; pFence != pFenceEnd; ++pFence)
+		vkDestroyFence(device, *pFence, nullptr);
 
-	vkDestroyPipeline(_Emulator->device, _Emulator->pipeline.composite, nullptr);
-	vkDestroyPipelineLayout(_Emulator->device, _Emulator->pipelineLayout.composite, nullptr);
+	delete[] _Renderer->frameFence;
 
-	vkDestroyDescriptorSetLayout(_Emulator->device, _Emulator->descriptorSetLayout.imageRead, nullptr);
-	vkDestroySampler(_Emulator->device, _Emulator->sampler.raw, nullptr);
+	const VkSemaphore* const pRenderSemaphoreEnd = _Renderer->renderSemaphore.pEnd;
+	for (const VkSemaphore* pRenderSemaphore{ _Renderer->renderSemaphore.pBegin }; pRenderSemaphore != pRenderSemaphoreEnd; ++pRenderSemaphore)
+		vkDestroySemaphore(device, *pRenderSemaphore, nullptr);
 
-	vkDestroyRenderPass(_Emulator->device, _Emulator->renderPass.composite, nullptr);
+	delete[] _Renderer->renderSemaphore;
 
-	const VkImageView* const pImageViewEnd = _Emulator->swapchainImageView.pEnd;
-	for (const VkImageView* pImageView{ _Emulator->swapchainImageView.pBegin }; pImageView != pImageViewEnd; ++pImageView)
-		vkDestroyImageView(_Emulator->device, *pImageView, nullptr);
+	const VkSemaphore* const pImageSemaphoreEnd = _Renderer->imageSemaphore.pEnd;
+	for (const VkSemaphore* pImageSemaphore{ _Renderer->imageSemaphore.pBegin }; pImageSemaphore != pImageSemaphoreEnd; ++pImageSemaphore)
+		vkDestroySemaphore(device, *pImageSemaphore, nullptr);
 
-	vkDestroySwapchainKHR(_Emulator->device, _Emulator->swapchain, nullptr);
+	delete[] _Renderer->imageSemaphore;
 
-	vmaDestroyBuffer(_Emulator->allocator, _Emulator->stagingBuffer, _Emulator->stagingAllocation);
+	delete[] _Renderer->commandBuffer;
 
-	vmaDestroyAllocator(_Emulator->allocator);
+	vkDestroyCommandPool(device, _Renderer->commandPool, nullptr);
 
-	vkDestroyCommandPool(_Emulator->device, _Emulator->commandPool.transfer, nullptr);
-	vkDestroyCommandPool(_Emulator->device, _Emulator->commandPool.graphics, nullptr);
-
-	vkDestroyDevice(_Emulator->device, nullptr);
-
-	vkDestroySurfaceKHR(_Context->instance, _Emulator->surface, nullptr);
-
-	delete _Emulator;
+	delete _Renderer;
 }
 
-int createImage(Emulator const _Emulator, const void* const pData, size_t _Size, uint32_t _Width, uint32_t _Height) noexcept {
-	VkResult result;
+int bindCanvas(Canvas const _Canvas, Renderer const _Renderer) noexcept {
 
-	VkImage _image = VK_NULL_HANDLE;
-	VmaAllocation _allocation = VK_NULL_HANDLE;
+}
+
+int waitRenderer(Renderer const _Renderer) noexcept {
+	const VkDevice device = _Renderer->device;
+	const uint32_t fenceCount = _Renderer->bufferedFrames;
+
+	VkResult result = vkWaitForFences(device, fenceCount, _Renderer->frameFence, VK_TRUE, UINT64_MAX);
+
+	if (result == VK_SUCCESS)
+		return 0;
+	else if (result == VK_TIMEOUT)
+		return 1;
+	else
+		return -1;
+}
+
+int draw(Canvas const _Canvas, Renderer const _Renderer, RenderBox const _RenderBox) noexcept {
+	const VkDevice device = _Renderer->device;
 
 	do {
+		VkResult result;
+		
+		const uint32_t frame = _Renderer->frame;
+
+		const VkSwapchainKHR swapchain = _Canvas->swapchain;
+		const VkSemaphore imageAvailable = _Renderer->imageSemaphore[frame];
+
+		const VkFence frameFence = _Renderer->frameFence[frame];
+		
+		result = vkWaitForFences(device, 1u, &frameFence, VK_TRUE, UINT64_MAX);
+
+		if (result != VK_SUCCESS)
+			break;
+		
+		uint32_t imageIndex;
+		result = vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, imageAvailable, VK_NULL_HANDLE, &imageIndex);
+
+		if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+			break;
+		
+		VkFence imageFence = _Renderer->imageFence[imageIndex];
+
+		if (!imageFence)
+			imageFence = frameFence;
+
+		result = vkWaitForFences(device, 1u, &imageFence, VK_TRUE, UINT64_MAX);
+
+		if (result != VK_SUCCESS)
+			break;
+		
+		const VkCommandBuffer commandBuffer = _Renderer->commandBuffer[frame];
+
+		result = vkResetCommandBuffer(commandBuffer, 0);
+
+		if (result != VK_SUCCESS)
+			break;
+
 		{
-			VkImageCreateInfo createInfo{};
-			createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+			VkCommandBufferBeginInfo beginInfo{};
+			beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+			beginInfo.pNext = nullptr;
+			beginInfo.flags = 0;
+			beginInfo.pInheritanceInfo = nullptr;
+
+			result = vkBeginCommandBuffer(commandBuffer, &beginInfo);
+		}
+
+		if (result != VK_SUCCESS)
+			break;
+
+		const VkRect2D renderArea = { {}, _Canvas->extent };
+
+		{
+			VkRenderPassBeginInfo beginInfo{};
+			beginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+			beginInfo.pNext = nullptr;
+			beginInfo.renderPass = _Canvas->renderPass;
+			beginInfo.framebuffer = _Canvas->framebuffer[imageIndex];
+			beginInfo.renderArea = renderArea;
+			beginInfo.clearValueCount = static_cast<uint32_t>(_Canvas->clearValue.size());
+			beginInfo.pClearValues = _Canvas->clearValue;
+
+			vkCmdBeginRenderPass(commandBuffer, &beginInfo, VK_SUBPASS_CONTENTS_INLINE);
+		}
+
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _RenderBox->pipeline);
+
+		VkViewport viewport{};
+		viewport.x = 0.0f;
+		viewport.y = 0.0f;
+		viewport.width = renderArea.extent.width;
+		viewport.height = renderArea.extent.height;
+		viewport.minDepth = 0.0f;
+		viewport.maxDepth = 1.0f;
+
+		vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+		VkRect2D scissor{};
+		scissor.offset = { 0, 0 };
+		scissor.extent = renderArea.extent;
+
+		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+		vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+
+		vkCmdEndRenderPass(commandBuffer);
+
+		result = vkEndCommandBuffer(commandBuffer);
+
+		if (result != VK_SUCCESS)
+			break;
+
+		VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+		const VkSemaphore renderSemaphore = _Renderer->renderSemaphore[frame];
+
+		result = vkResetFences(device, 1u, &frameFence);
+
+		if (result != VK_SUCCESS)
+			break;
+
+		{
+			VkSubmitInfo submitInfo{};
+			submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+			submitInfo.pNext = nullptr;
+			submitInfo.waitSemaphoreCount = 1u;
+			submitInfo.pWaitSemaphores = &imageAvailable;
+			submitInfo.pWaitDstStageMask = &waitStage;
+			submitInfo.commandBufferCount = 1u;
+			submitInfo.pCommandBuffers = &commandBuffer;
+			submitInfo.signalSemaphoreCount = 1u;
+			submitInfo.pSignalSemaphores = &renderSemaphore;
+
+			result = vkQueueSubmit(_Renderer->graphics, 1u, &submitInfo, _Renderer->frameFence[frame]);
+		}
+
+		if (result != VK_SUCCESS)
+			break;
+
+		_Renderer->imageFence[imageIndex] = frameFence;
+
+		{
+			VkPresentInfoKHR presentInfo{};
+			presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+			presentInfo.pNext = nullptr;
+			presentInfo.waitSemaphoreCount = 1u;
+			presentInfo.pWaitSemaphores = &renderSemaphore;
+			presentInfo.swapchainCount = 1u;
+			presentInfo.pSwapchains = &swapchain;
+			presentInfo.pResults = nullptr;
+			presentInfo.pImageIndices = &imageIndex;
+
+			result = vkQueuePresentKHR(_Renderer->present, &presentInfo);
+		}
+
+		if (result != VK_SUCCESS)
+			break;
+
+		_Renderer->frame++;
+		_Renderer->frame = _Renderer->frame == _Renderer->bufferedFrames ? 0 : _Renderer->frame;
+
+		return 0;
+
+	} while (false);
+
+	return -1;
+}
+
+struct ResourceSet_T {
+	mem::static_vector<Image> image;
+	mem::static_vector<VkImageView> imageview;
+	mem::static_vector<Buffer> buffer;
+	mem::static_vector<VkBufferView> bufferview;
+};
+
+struct Model {
+	Buffer vertex;
+	Buffer index;
+	size_t vertCount;
+};
+
+int defferedLoadObject(AsyncLoader const _AsyncLoader, ResourceSet const _ResourceSet, const RenderObjectCreateInfo* const pCreateInfo) noexcept {
+	Buffer _vertexBuffer{};
+	Buffer _indexBuffer{};
+
+	do {
+		VkResult result;
+
+		{
+			VkBufferCreateInfo createInfo{};
+			createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 			createInfo.pNext = nullptr;
 			createInfo.flags = 0;
-			createInfo.imageType = VK_IMAGE_TYPE_2D;
-			createInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
-			createInfo.extent = { _Width, _Height, 1 };
-			createInfo.mipLevels = 1;
-			createInfo.arrayLayers = 1;
-			createInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-			createInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-			createInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+			createInfo.size = static_cast<VkDeviceSize>(pCreateInfo->vertexBufferSize);
+			createInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 			createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 			createInfo.queueFamilyIndexCount = 0;
 			createInfo.pQueueFamilyIndices = nullptr;
-			createInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
 			VmaAllocationCreateInfo allocationInfo{};
 			allocationInfo.flags = 0;
@@ -1302,18 +2104,38 @@ int createImage(Emulator const _Emulator, const void* const pData, size_t _Size,
 			allocationInfo.pUserData = nullptr;
 			allocationInfo.priority = 0;
 
-			result = vmaCreateImage(_Emulator->allocator, &createInfo, &allocationInfo, &_image, &_allocation, nullptr);
+			result = vmaCreateBuffer(_AsyncLoader->allocator, &createInfo, &allocationInfo, &_vertexBuffer.buffer, &_vertexBuffer.allocation, nullptr);
+
+			if (result != VK_SUCCESS)
+				break;
+
+			createInfo.size = static_cast<VkDeviceSize>(pCreateInfo->indexBufferSize);
+			createInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
+			result = vmaCreateBuffer(_AsyncLoader->allocator, &createInfo, &allocationInfo, &_indexBuffer.buffer, &_indexBuffer.allocation, nullptr);
 		}
 
 		if (result != VK_SUCCESS)
 			break;
 
-		return 0;
+		{
+			VkCommandBufferBeginInfo beginInfo{};
+			beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+			beginInfo.pNext = nullptr;
+			beginInfo.flags = 0;
+			beginInfo.pInheritanceInfo = nullptr;
+
+			//result = vkBeginCommandBuffer();
+		}
+
+		rndr::DataSource source = { pCreateInfo->pVertex, pCreateInfo->vertexBufferSize };
+		VkDeviceSize write = 0;
+
+		VkBufferCopy copy;
+
+		_AsyncLoader->stage.streamBufferUpload(&source, &write, &copy);
 
 	} while (false);
 
-	if(_allocation)
-		vmaDestroyImage(_Emulator->allocator, _image, _allocation);
-	
 	return -1;
 }

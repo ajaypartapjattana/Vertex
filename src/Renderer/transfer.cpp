@@ -62,36 +62,21 @@ namespace rndr {
 
 		constexpr size_t bufferGranularity = 1ull;
 
-		StageChunk chunk;
+		StageChunk chunk{};
 		int result = commitChunk(&source, &bufferGranularity, 1, &chunk);
 
-		switch (result) {
-		case -1:
+		if (result == -1) {
 			stats.failures++;
-
-			return -1;
-		
-		case 0:
+		}
+		else {
 			pRegion->srcOffset = chunk.offset;
 			pRegion->dstOffset = *pOffset;
 			pRegion->size = chunk.size;
 
 			*pOffset += chunk.size;
-
-			return 0;
-
-		case 1:
-			pRegion->srcOffset = chunk.offset;
-			pRegion->dstOffset = *pOffset;
-			pRegion->size = chunk.size;
-
-			*pOffset += chunk.size;
-
-			return 1;
-			
 		}
 
-		return -1;
+		return result;
 	}
 
 	int TransferStage::streamImageUpload(const DataSource* const pSource, const TransferImageAttributes* const pImageInfo, VkOffset3D* const pOffset, VkBufferImageCopy* const pRegion) noexcept {

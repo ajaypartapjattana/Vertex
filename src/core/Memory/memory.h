@@ -47,6 +47,14 @@ namespace mem {
 			memcpy(pBegin, _Other.pBegin, size() * sizeof(_Ty));
 		}
 
+		const _Ty& back() const noexcept {
+			return *(pEnd - 1u);
+		}
+
+		_Ty& back() noexcept {
+			return *(pEnd - 1u);
+		}
+
 		_Ty& operator[](size_t _Index) noexcept {
 			return pBegin[_Index];
 		}
@@ -141,104 +149,108 @@ namespace mem {
 	};
 
 	template <typename _Ty>
-	class static_vector {
-	private:
-		span<_Ty> storage;
+	struct static_vector {
+		_Ty* pBegin = nullptr;
+		_Ty* pEnd = nullptr;
 		_Ty* pCurrent = nullptr;
 
-	public:
 		static_vector() noexcept = default;
 		static_vector(const span<_Ty>& _Span) noexcept 
-			:
-			storage(_Span),
-			pCurrent(_Span.pBegin)
+			: pBegin(_Span.pBegin)
+			, pEnd(_Span.pEnd)
+			, pCurrent(_Span.pBegin)
 		{
 
 		}
 
 		static_vector& operator=(const span<_Ty>& _Span) noexcept {
-			storage = _Span;
-			pCurrent = storage.pBegin;
+			pBegin = _Span.pBegin;
+			pEnd = _Span.pEnd;
+			pCurrent = _Span.pBegin;
 
 			return *this;
 		}
 
 		_Ty& operator[](size_t _Index) noexcept {
-			return storage.pBegin[_Index];
+			return pBegin[_Index];
 		}
 
 		const _Ty& operator[](size_t _Index) const noexcept {
-			return storage.pBegin[_Index];
+			return pBegin[_Index];
+		}
+
+		explicit operator bool() const noexcept {
+			return pBegin && pEnd;
 		}
 
 		span<_Ty> view() const noexcept {
-			return { storage.pBegin, pCurrent };
+			return span<_Ty>{ pBegin, pCurrent };
 		}
 
 		size_t size() const noexcept {
-			return static_cast<size_t>(pCurrent - storage.pBegin);
+			return static_cast<size_t>(pCurrent - pBegin);
 		}
 
 		size_t capacity() const noexcept {
-			return storage.size();
+			return static_cast<size_t>(pEnd - pBegin);
 		}
 
 		bool empty() const noexcept {
-			return pCurrent == storage.pBegin;
+			return pCurrent == pBegin;
 		}
 
 		void clear() noexcept {
 			if constexpr (!std::is_trivially_destructible_v<_Ty>)
-				while (pCurrent != storage.pBegin)
+				while (pCurrent != pBegin)
 					(--pCurrent)->~_Ty();
 			else
-				pCurrent = storage.pBegin;
+				pCurrent = pBegin;
 		}
 
 		void push_back_unique(_Ty& _Val) noexcept {
-			for (const _Ty* pVal{ storage.pBegin }; pVal != pCurrent; ++pVal) {
+			for (const _Ty* pVal{ pBegin }; pVal != pCurrent; ++pVal) {
 				if (*pVal == _Val)
 					return;
 			}
 
-			assert(pCurrent != storage.pEnd);
+			assert(pCurrent != pEnd);
 
 			*(pCurrent++) = _Val;
 		}
 
 		void push_back(_Ty& _Val) noexcept {
-			assert(pCurrent != storage.pEnd);
+			assert(pCurrent != pEnd);
 
 			*(pCurrent++) = _Val;
 		}
 
 		void push_back_unique(_Ty&& _Val) noexcept {
-			for (const _Ty* pVal{ storage.pBegin }; pVal != pCurrent; ++pVal) {
+			for (const _Ty* pVal{ pBegin }; pVal != pCurrent; ++pVal) {
 				if (*pVal == _Val)
 					return;
 			}
 
-			assert(pCurrent != storage.pEnd);
+			assert(pCurrent != pEnd);
 
 			*(pCurrent++) = std::move(_Val);
 		}
 
 		void push_back(_Ty&& _Val) noexcept {
-			assert(pCurrent != storage.pEnd);
+			assert(pCurrent != pEnd);
 
 			*(pCurrent++) = std::move(_Val);
 		}
 
 		template <class... Args>
 		_Ty* emplace_back(Args&&... args) noexcept {
-			assert(pCurrent != storage.pEnd);
+			assert(pCurrent != pEnd);
 			::new (pCurrent) _Ty(std::forward<Args>(args)...);
 
 			return pCurrent++;
 		}
 
 		void pop_back() noexcept {
-			assert(pCurrent != storage.pBegin);
+			assert(pCurrent != pBegin);
 			--pCurrent;
 
 			if constexpr (!std::is_trivially_destructible_v<_Ty>)
@@ -580,7 +592,36 @@ namespace mem {
 		}
 
 		template <typename _Ty>
+		_Ty* alloc() noexcept {
+			if (!pBase) {
+				try {
+					resize(sizeof(_Ty));
+				}
+				catch (const std::exception& _Except) {
+					return nullptr;
+				}
+			}
+
+			uint8_t* pThis = alignUp<uint8_t>(pCurrent, alignof(_Ty));
+			uint8_t* pTill = pThis + sizeof(_Ty);
+
+			try {
+				ensure(pTill);
+			}
+			catch (const std::exception& _Except) {
+				return nullptr;
+			}
+
+			pCurrent = pTill;
+
+			return pThis;
+		}
+
+		template <typename _Ty>
 		span<_Ty> alloc(size_t _Count) noexcept {
+			if (!_Count)
+				return {};
+
 			const size_t allocSize = _Count * sizeof(_Ty);
 
 			if (!pBase) {
@@ -869,7 +910,5 @@ namespace mem {
 		}
 
 	};
-
-	inline thread_local stack scratch{32 << 20};
 
 }

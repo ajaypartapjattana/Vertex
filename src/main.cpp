@@ -6,165 +6,240 @@
 #include <Platform/platform.h>
 #include <Renderer/renderer.h>
 
-int readPng(const char* _Path) noexcept {
-    const mem::marker mark = mem::scratch.mark();
-    
-    io::Inflator _inflator = nullptr;
+int readPng(mem::stack* const pScratch, const char* _Path) noexcept {
+	const mem::marker mark = pScratch->mark();
+	
+	io::Inflator _inflator = nullptr;
 
-    do {
-        int error;
+	do {
+		int error;
 
-        size_t fileSize = 0;
-        error = io::getBinarySize(_Path, &fileSize);
+		size_t fileSize = 0;
+		error = io::getBinarySize(_Path, &fileSize);
 
-        if (error)
-            break;
+		if (error)
+			break;
 
-        mem::scratch.mark();
-        mem::span<uint8_t> imageBin = mem::scratch.alloc<uint8_t>(fileSize);
+		mem::span<uint8_t> imageBin = pScratch->alloc<uint8_t>(fileSize);
 
-        error = io::loadBinary(_Path, fileSize, imageBin);
+		error = io::loadBinary(_Path, fileSize, imageBin);
 
-        if (error)
-            break;;
+		if (error)
+			break;;
 
-        io::ImageInfo imageInfo;
-        error = io::fetchPngInfo(imageBin, fileSize, &imageInfo);
+		io::ImageInfo imageInfo;
+		error = io::fetchPngInfo(imageBin, fileSize, &imageInfo);
 
-        if (error)
-            break;
+		if (error)
+			break;
 
-        size_t resolveMemorySize;
-        io::getInflateBufferSize(&imageInfo, &resolveMemorySize);
+		const size_t imageSize = io::getImageSize(&imageInfo);
+		mem::span<uint8_t> image = pScratch->alloc<uint8_t>(imageSize);
+		
+		io::Inflator inflator = nullptr;
 
-        mem::span<uint8_t> resolveMemory = mem::scratch.alloc<uint8_t>(resolveMemorySize);
-    
-        const size_t imageSize = io::getImageSize(&imageInfo);
-        mem::span<uint8_t> image = mem::scratch.alloc<uint8_t>(imageSize);
+		{
+			size_t resolveMemorySize;
+			io::getInflateBufferSize(&imageInfo, &resolveMemorySize);
+			mem::span<uint8_t> resolveMemory = pScratch->alloc<uint8_t>(resolveMemorySize);
 
-        io::Inflator inflator = nullptr;
+			io::InflatorCreateInfo createInfo{};
+			createInfo.imageInfo = &imageInfo;
+			createInfo.pStreamSrc = imageBin.pBegin;
+			createInfo.StreamSize = imageBin.size();
+			createInfo.pDst = image.pBegin;
+			createInfo.pLimit = image.pEnd;
+		
+			error = io::createInflator(&createInfo, resolveMemory, &inflator);
+		}
 
-        {
-            io::InflatorCreateInfo createInfo{};
-            createInfo.imageInfo = &imageInfo;
-            createInfo.pStreamSrc = imageBin.pBegin;
-            createInfo.StreamSize = imageBin.size();
-            createInfo.pDst = image.pBegin;
-            createInfo.pLimit = image.pEnd;
-        
-            error = io::createInflator(&createInfo, resolveMemory, &inflator);
-        }
+		if (error)
+			break;
 
-        if (error)
-            break;
+		error = io::decodePng(inflator);
 
-        error = io::decodePng(inflator);
+		if (error)
+			break;
 
-        if (error)
-            break;
+		io::destroyInflator(_inflator);
 
-        io::destroyInflator(_inflator);
+		pScratch->restore(mark);
 
-        return 0;
-    } while (false);
+		return 0;
+	} while (false);
 
-    if (_inflator)
-        io::destroyInflator(_inflator);
-    
-    mem::scratch.restore(mark);
+	if (_inflator)
+		io::destroyInflator(_inflator);
+	
+	pScratch->restore(mark);
 
-    return -1;
+	return -1;
 }
 
 int main() {
-    
-    int error = readPng("assets/textures/seaside.png"); 
+	mem::stack scratch;
 
-    if (error)
-        return EXIT_FAILURE;
+	try {
+		scratch.resize(32u << 20);
+	}
+	catch (const std::exception* _Except) {
+		return EXIT_FAILURE;
+	}
 
-    DisplayContext windowCtx;
-    
-    error = requestDisplayContext(&windowCtx);
+	DisplayContext windowCtx = nullptr;
+	DisplayWindow window = nullptr;
 
-    if (error)
-        return EXIT_FAILURE;
+	VulkanContext vulkanCtx = nullptr;
+	Emulator emulator = nullptr;
 
-    WindowHandle window;
+	Canvas canvas = nullptr;
+	RenderBox renderBox = nullptr;
+	Renderer renderer = nullptr;
+	
+	do {
+		int failure;
 
-    {
-        WindowCreateInfo createInfo{};
-        createInfo.flags = WINDOW_CREATE_FULLSCREEN_BIT | WINDOW_CREATE_RESIZABLE_BIT;
-        createInfo.width = 800u;
-        createInfo.height = 600u;
-        createInfo.title = "My Window";
+		failure = requestDisplayContext(&windowCtx);
 
-        error = createDisplayWindow(windowCtx, &createInfo, &window);
-    }
+		if (failure)
+			break;
 
-    if (error)
-        return EXIT_FAILURE;
+		{
+			WindowCreateInfo createInfo{};
+			createInfo.flags = WINDOW_CREATE_FULLSCREEN_BIT | WINDOW_CREATE_RESIZABLE_BIT;
+			createInfo.width = 800u;
+			createInfo.height = 600u;
+			createInfo.title = "My Window";
 
-    VulkanContext vkContext;
+			failure = createDisplayWindow(windowCtx, &createInfo, &window);
+		}
 
-    error = requestVulkanContext(&vkContext);
+		if (failure)
+			break;
 
-    if (error)
-        return EXIT_FAILURE;
+		failure = requestVulkanContext(&scratch, &vulkanCtx);
 
-    VulkanSurfaceDependencyInfo surfaceInfo;
+		if (failure)
+			break;
 
-    getVulkanSurfaceDependencyInfo(windowCtx, window, &surfaceInfo);
+		uint32_t selectedDeviceIndex = 0;
 
-    Emulator emulator;
+		{
+			uint32_t deviceCount;
+			enumeratePhysicalDevices(vulkanCtx, &deviceCount, nullptr);
 
-    {
-        uint32_t deviceCount;
-        enumeratePhysicalDevices(vkContext, &deviceCount, nullptr);
+			mem::span<const char*> devices = scratch.alloc<const char*>(deviceCount);
+			enumeratePhysicalDevices(vulkanCtx, &deviceCount, devices.pBegin);
 
-        mem::span<const char*> devices = mem::scratch.alloc<const char*>(deviceCount);
-        enumeratePhysicalDevices(vkContext, &deviceCount, devices.pBegin);
+			for (size_t i = 0; i < deviceCount; ++i) {
+				std::cout << "[" << i << "] : " << devices[i] << std::endl;
+			}
 
-        for (size_t i = 0; i < deviceCount; ++i) {
-            std::cout << "[" << i << "] : " << devices[i] << std::endl;
-        }
+			std::cout << "PHYSICAL_DEVICE_INDEX : ";
+			std::cin >> selectedDeviceIndex;
+		}
 
-        std::cout << "PHYSICAL_DEVICE_INDEX : ";
-        
-        uint32_t selectedDeviceIndex = 0;
-        std::cin >> selectedDeviceIndex;
+		raiseDisplayWindow(windowCtx, window);
 
-        RendererCreateInfo createInfo{};
-        createInfo.physicalDevice = selectedDeviceIndex;
-        createInfo.windowContext = surfaceInfo.context;
-        createInfo.windowHandle = surfaceInfo.window;
+		{
+			VulkanSurfaceDependencyInfo surfaceInfo;
+			getVulkanSurfaceDependencyInfo(windowCtx, window, &surfaceInfo);
 
-        error = createEmulator(vkContext, &createInfo, &emulator);
-    }
+			EmulatorCreateInfo createInfo{};
+			createInfo.physicalDevice = selectedDeviceIndex;
+			createInfo.windowContext = surfaceInfo.context;
+			createInfo.windowHandle = surfaceInfo.window;
 
-    if (error)
-        return EXIT_FAILURE;
+			failure = createEmulator(vulkanCtx, &createInfo, &scratch, &emulator);
+		}
+			
+		if (failure)
+			break;
 
-    mem::span<WindowEvent> windowEvents = mem::scratch.alloc<WindowEvent>(64u);
+		{
+			CanvasCreateInfo createInfo{};
+			createInfo.minImageCount = 2u;
 
-    bool windowShouldClose = false;
-    while (!windowShouldClose) {
-        size_t eventCount = pollWindowEvent(windowCtx, windowEvents, windowEvents.size());
+			failure = createCanvas(emulator, &createInfo, &scratch, &canvas);
+		}
 
-        const WindowEvent* const pEventEnd = windowEvents.pBegin + eventCount;
-        for(const WindowEvent* pEvent{ windowEvents.pBegin }; pEvent != pEventEnd; ++pEvent) {
-            if(pEvent->type == WINDOW_EVENT_TYPE_WINDOW_CLOSE) {
-                windowShouldClose = true;
-                break;
-            }
-        }
-    }
+		if (failure)
+			break;
 
-    purgeEmulator(vkContext, emulator);
-    purgeVulkanContext(vkContext);
+		failure = createRenderBox(emulator, canvas, &scratch, &renderBox);
 
-    purgeDisplayWindow(windowCtx, window);
-    purgeDisplayContext(windowCtx);
+		if (failure)
+			break;
 
-    return EXIT_SUCCESS;
+		{
+			RendererCreateInfo createInfo{};
+			createInfo.maxFrameBuffering = 2u;
+
+			failure = createRenderer(emulator, canvas, renderBox, &createInfo, &renderer);
+		}
+
+		if (failure)
+			break;
+
+		mem::span<WindowEvent> windowEvents = scratch.alloc<WindowEvent>(64u);
+
+		while (!failure) {
+			WindowEventMask eventMask = WINDOW_EVENT_MASK_CLOSE_BIT | WINDOW_EVENT_MASK_RESIZE_BIT;
+			size_t eventCount = pollWindowEvents(windowCtx, &eventMask, windowEvents, windowEvents.size());
+
+			if (eventMask & WINDOW_EVENT_MASK_CLOSE_BIT)
+				break;
+			
+			if (eventMask & WINDOW_EVENT_MASK_RESIZE_BIT)
+				updateCanvas(canvas);
+
+			failure = draw(canvas, renderer, renderBox);
+		}
+
+		if (failure)
+			break;
+
+		failure = waitEmulator(emulator);
+
+		if (failure)
+			break;
+
+		destroyRenderer(renderer);
+		destroyRenderBox(renderBox);
+		destroyCanvas(canvas);
+
+		destroyEmulator(emulator);
+		destroyVulkanContext(vulkanCtx);
+
+		destroyDisplayWindow(windowCtx, window);
+		destroyDisplayContext(windowCtx);
+
+		return EXIT_SUCCESS;
+		
+	} while (false);
+
+	while (waitEmulator(emulator));
+
+	if (renderer)
+		destroyRenderer(renderer);
+
+	if (renderBox)
+		destroyRenderBox(renderBox);
+
+	if (canvas)
+		destroyCanvas(canvas);
+
+	if (emulator)
+		destroyEmulator(emulator);
+	
+	if (vulkanCtx)
+		destroyVulkanContext(vulkanCtx);
+
+	if (window)
+		destroyDisplayWindow(windowCtx, window);
+
+	if (windowCtx)
+		destroyDisplayContext(windowCtx);
+
+	return EXIT_FAILURE;
 }

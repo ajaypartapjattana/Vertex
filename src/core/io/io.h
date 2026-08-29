@@ -20,6 +20,8 @@ namespace io {
 	int getBinarySize(const char* const _Path, size_t* const pSize) noexcept;
 	int loadBinary(const char* const _Path, const size_t _LoadSize, void* const pDst) noexcept;
 
+	int parseWavefront(const void* const pSrc, const size_t _Size) noexcept;
+
 	int fetchPngInfo(const void* pBin, size_t _Size, ImageInfo* const pInfo) noexcept;
 
 	struct InflatorCreateInfo {

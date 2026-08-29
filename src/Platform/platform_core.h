@@ -24,61 +24,47 @@ struct WindowGeomentry {
 	uint16_t height;
 };
 
-enum WindowEventType : uint32_t {
-	WINDOW_EVENT_TYPE_WINDOW_CLOSE,
-	WINDOW_EVENT_TYPE_WINDOW_RESIZE,
-	WINDOW_EVENT_TYPE_WINDOW_MOVE,
-	WINDOW_EVENT_TYPE_FOCUS_GAINED,
-	WINDOW_EVENT_TYPE_FOCUS_LOST
-};
-
-struct EventExtentInfo {
-	uint16_t width;
-	uint16_t height;
-};
-
-struct EventPositionInfo {
-	int16_t x;
-	int16_t y;
-};
-
-struct EventDeltaInfo {
-	int16_t dx;
-	int16_t dy;
-};
-
 struct DisplayContext_T;
 using DisplayContext = DisplayContext_T*;
 
-using WindowHandle = uintptr_t;
+int requestDisplayContext(DisplayContext* const pContext) noexcept;
+void destroyDisplayContext(DisplayContext const _Context) noexcept;
 
-struct WindowEvent {
-	WindowHandle window;
-	WindowEventType type;
-	union {
-		EventExtentInfo extent;
-		EventPositionInfo position;
-		EventDeltaInfo delta;
-	} eventInfo;
+struct DisplayWindow_T;
+using DisplayWindow = DisplayWindow_T*;
+
+int createDisplayWindow(const DisplayContext _Context, const WindowCreateInfo* const pCreateInfo, DisplayWindow* const pWindow) noexcept;
+void destroyDisplayWindow(DisplayContext const _Context, DisplayWindow const _Window) noexcept;
+
+void raiseDisplayWindow(DisplayContext const _Context, DisplayWindow const _Window) noexcept;
+int queryWindowGeometry(DisplayContext const _Context, DisplayWindow const _Window, WindowGeomentry* const pGeomentry) noexcept;
+void setWindowGeometry(DisplayContext const _Context, DisplayWindow const _Window, const WindowGeomentry* const pGeometry) noexcept;
+void setWindowTitle(DisplayContext const _Context, DisplayWindow const _Window, const char* const _Title) noexcept;
+
+using WindowEventFlags = uint32_t;
+enum WindowEventFlagBit : WindowEventFlags {
+	WINDOW_EVENT_CLOSE_BIT = 1u << 0,
+	WINDOW_EVENT_RESIZE_BIT = 1u << 1,
+	WINDOW_EVENT_MOVE_BIT = 1u << 2,
+	WINDOW_EVENT_FOCUS_GAINED_BIT = 1u << 3,
+	WINDOW_EVENT_FOCUS_LOST_BIT = 1u << 4
 };
 
-int requestDisplayContext(DisplayContext* const pContext) noexcept;
-int createDisplayWindow(const DisplayContext _Context, const WindowCreateInfo* const pCreateInfo, WindowHandle* const pHandle) noexcept;
+struct EventBufferCreateInfo {
+	WindowEventFlags eventMask;
+	uint32_t size;
+};
 
-size_t pollWindowEvent(DisplayContext const _Context, WindowEvent* const pEventBuffer, const size_t _BufferSize) noexcept;
+struct EventBuffer_T;
+using EventBuffer = EventBuffer_T*;
 
-void purgeDisplayWindow(DisplayContext const _Context, WindowHandle _Window) noexcept;
-void purgeDisplayContext(DisplayContext const _Context) noexcept;
+int createEventBuffer(const EventBufferCreateInfo* const pCreateInfo, EventBuffer* const pBuffer) noexcept;
 
-int getWindowGeometry(DisplayContext const _Context, const WindowHandle _Window, WindowGeomentry* const pGeomentry) noexcept;
-
-void setWindowGeometry(DisplayContext const _Context, const WindowHandle _Window, const WindowGeomentry* const pGeometry) noexcept;
-void setWindowTitle(DisplayContext const _Context, const WindowHandle _Window, const char* const _Title) noexcept;
+void pollWindowEvents(DisplayContext const _Context, EventBuffer const _Buffer) noexcept;
 
 struct VulkanSurfaceDependencyInfo {
-	char SurfaceType[8];
 	void* context;
 	uintptr_t window;
 };
 
-void getVulkanSurfaceDependencyInfo(DisplayContext const _Context, const WindowHandle _Window, VulkanSurfaceDependencyInfo* const pDependencyInfo) noexcept;
+void getVulkanSurfaceDependencyInfo(DisplayContext const _Context, DisplayWindow const _Window, VulkanSurfaceDependencyInfo* const pDependencyInfo) noexcept;
