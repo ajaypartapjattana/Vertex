@@ -189,7 +189,7 @@ int createDisplayWindow(const DisplayContext _Context, const WindowCreateInfo* c
 		uint32_t mask = XCB_CW_BACK_PIXEL | XCB_CW_EVENT_MASK;
 		uint32_t values[] = { screen->black_pixel, XCB_EVENT_MASK_EXPOSURE | XCB_EVENT_MASK_STRUCTURE_NOTIFY | XCB_EVENT_MASK_FOCUS_CHANGE };
 		
-		xcb_void_cookie_t cookie = xcb_create_window_checked(connection, XCB_COPY_FROM_PARENT, _window, screen->root, 0, 0, pCreateInfo->width, pCreateInfo->height, 0, XCB_WINDOW_CLASS_INPUT_OUTPUT, screen->root_visual, mask, values);
+		xcb_void_cookie_t cookie = xcb_create_window_checked(connection, XCB_COPY_FROM_PARENT, _window, screen->root, pCreateInfo->x, pCreateInfo->y, pCreateInfo->width, pCreateInfo->height, 0, XCB_WINDOW_CLASS_INPUT_OUTPUT, screen->root_visual, mask, values);
 
 		if (xcb_generic_error_t* error = xcb_request_check(connection, cookie)) {
 			std::free(error);
@@ -211,6 +211,8 @@ int createDisplayWindow(const DisplayContext _Context, const WindowCreateInfo* c
 		displayWindow->screen = screen;
 		displayWindow->width = pCreateInfo->width;
 		displayWindow->height = pCreateInfo->height;
+		displayWindow->x = pCreateInfo->x;
+		displayWindow->y = pCreateInfo->y;
 
 		*pWindow = displayWindow;
 
@@ -269,7 +271,7 @@ int queryWindowGeometry(const DisplayContext _Context, DisplayWindow const _Wind
 	return 0;
 }
 
-void setWindowGeometry(const DisplayContext _Context, DisplayWindow const _Window, const WindowGeomentry* const pGeometry) noexcept {
+int setWindowGeometry(const DisplayContext _Context, DisplayWindow const _Window, const WindowGeomentry* const pGeometry) noexcept {
 	uint32_t values[] = { 
 		static_cast<uint32_t>(pGeometry->x),
 		static_cast<uint32_t>(pGeometry->y),
@@ -280,7 +282,16 @@ void setWindowGeometry(const DisplayContext _Context, DisplayWindow const _Windo
 	xcb_connection_t* const connection = _Context->connection;
 
 	xcb_configure_window(connection, _Window->window, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, values);
-	xcb_flush(connection);
+	
+	if (!xcb_flush(connection))
+		return -1;
+
+	_Window->width = pGeometry->width;
+	_Window->height = pGeometry->height;
+	_Window->x = pGeometry->x;
+	_Window->y = pGeometry->y;
+
+	return 0;
 }
 
 void setWindowTitle(const DisplayContext _Context, DisplayWindow const _Window, const char* const _Title) noexcept {

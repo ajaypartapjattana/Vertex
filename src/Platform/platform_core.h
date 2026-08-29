@@ -14,6 +14,8 @@ struct WindowCreateInfo {
 	WindowCreateFlags flags;
 	uint16_t width;
 	uint16_t height;
+	int16_t x;
+	int16_t y;
 	const char* title;
 };
 
@@ -38,7 +40,7 @@ void destroyDisplayWindow(DisplayContext const _Context, DisplayWindow const _Wi
 
 void raiseDisplayWindow(DisplayContext const _Context, DisplayWindow const _Window) noexcept;
 int queryWindowGeometry(DisplayContext const _Context, DisplayWindow const _Window, WindowGeomentry* const pGeomentry) noexcept;
-void setWindowGeometry(DisplayContext const _Context, DisplayWindow const _Window, const WindowGeomentry* const pGeometry) noexcept;
+int setWindowGeometry(DisplayContext const _Context, DisplayWindow const _Window, const WindowGeomentry* const pGeometry) noexcept;
 void setWindowTitle(DisplayContext const _Context, DisplayWindow const _Window, const char* const _Title) noexcept;
 
 using WindowEventFlags = uint32_t;
