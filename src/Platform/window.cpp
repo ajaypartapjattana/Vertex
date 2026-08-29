@@ -247,6 +247,7 @@ void raiseDisplayWindow(DisplayContext const _Context, DisplayWindow const _Wind
 	event.data.data32[3] = 0;
 	event.data.data32[4] = 0;
 
+	xcb_map_window(_Context->connection, _Window->window);
 	xcb_send_event(_Context->connection, 0, screen->root, XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT | XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY, reinterpret_cast<const char*>(&event));
 
 	xcb_flush(_Context->connection);
@@ -333,7 +334,7 @@ struct EventBuffer_T {
 	mem::span<WindowEvent> event;
 };
 
-int createEventBuffer(const EventBufferCreateInfo* const pCreateInfo, EventBuffer* const pBuffer) noexcept {
+int createEventBuffer(const EventBufferCreateInfo* const pCreateInfo, EventBuffer* const pEventBuffer) noexcept {
 	mem::span<WindowEvent> _event;
 
 	do {
@@ -348,9 +349,10 @@ int createEventBuffer(const EventBufferCreateInfo* const pCreateInfo, EventBuffe
 			break;
 
 		buffer->mask = pCreateInfo->eventMask;
+		buffer->count = 0;
 		buffer->event = _event;
 
-		*pBuffer = buffer;
+		*pEventBuffer = buffer;
 
 		return 0;
 
@@ -362,7 +364,13 @@ int createEventBuffer(const EventBufferCreateInfo* const pCreateInfo, EventBuffe
 	return -1;
 }
 
-void pollWindowEvents(DisplayContext const _Context, EventBuffer const _Buffer) noexcept {
+void destroyEventBuffer(EventBuffer const _EventBuffer) noexcept {
+	delete[] _EventBuffer->event;
+	
+	delete _EventBuffer;
+}
+
+bool pollWindowEvents(DisplayContext const _Context, EventBuffer const _Buffer) noexcept {
 	xcb_connection_t* const connection = _Context->connection;
 
 	WindowEvent* pEvent = _Buffer->event.pBegin;
@@ -372,7 +380,7 @@ void pollWindowEvents(DisplayContext const _Context, EventBuffer const _Buffer) 
 
 		if (!event)
 			break;
-
+		
 		const uint8_t type = event->response_type & ~0x80;
 
 		switch (type) {
@@ -433,6 +441,8 @@ void pollWindowEvents(DisplayContext const _Context, EventBuffer const _Buffer) 
 	}
 
 	_Buffer->count = static_cast<uint32_t>(pEvent - _Buffer->event.pBegin);
+
+	return _Buffer->count != 0;
 }
 
 void resolveWindowEvents(EventBuffer const _EventBuffer, DisplayWindow const _Window, WindowEventFlags* const pEventFlags) noexcept {
@@ -480,7 +490,7 @@ void resolveWindowEvents(EventBuffer const _EventBuffer, DisplayWindow const _Wi
 		}
 	}
 
-	*pEventFlags = events;
+	*pEventFlags |= events & _EventBuffer->mask;
 }
 
   #elif defined(WINDOW_X11)

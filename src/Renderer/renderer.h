@@ -81,8 +81,6 @@ struct RendererCreateInfo {
 int createRenderer(Emulator const _Emulator, Canvas const _Canvas, RenderBox const _RenderBox, const RendererCreateInfo* const pCreateInfo, Renderer* const pRenderer) noexcept;
 void destroyRenderer(Renderer const _Renderer) noexcept;
 
-int bindCanvas(Canvas const _Canvas, Renderer const _Renderer) noexcept;
-
 int waitRenderer(Renderer const _Renderer) noexcept;
 
 int draw(Canvas const _Canvas, Renderer const _Renderer, RenderBox const _RenderBox) noexcept;

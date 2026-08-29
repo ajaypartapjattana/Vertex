@@ -49,7 +49,8 @@ enum WindowEventFlagBit : WindowEventFlags {
 	WINDOW_EVENT_RESIZE_BIT = 1u << 1,
 	WINDOW_EVENT_MOVE_BIT = 1u << 2,
 	WINDOW_EVENT_FOCUS_GAINED_BIT = 1u << 3,
-	WINDOW_EVENT_FOCUS_LOST_BIT = 1u << 4
+	WINDOW_EVENT_FOCUS_LOST_BIT = 1u << 4,
+	WINDOW_EVENT_ALL_BIT = ~0u
 };
 
 struct EventBufferCreateInfo {
@@ -60,9 +61,11 @@ struct EventBufferCreateInfo {
 struct EventBuffer_T;
 using EventBuffer = EventBuffer_T*;
 
-int createEventBuffer(const EventBufferCreateInfo* const pCreateInfo, EventBuffer* const pBuffer) noexcept;
+int createEventBuffer(const EventBufferCreateInfo* const pCreateInfo, EventBuffer* const pEventBuffer) noexcept;
+void destroyEventBuffer(EventBuffer const _EventBuffer) noexcept;
 
-void pollWindowEvents(DisplayContext const _Context, EventBuffer const _Buffer) noexcept;
+bool pollWindowEvents(DisplayContext const _Context, EventBuffer const _Buffer) noexcept;
+void resolveWindowEvents(EventBuffer const _EventBuffer, DisplayWindow const _Window, WindowEventFlags* const pEventFlags) noexcept;
 
 struct VulkanSurfaceDependencyInfo {
 	void* context;

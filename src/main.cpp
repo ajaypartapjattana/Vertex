@@ -76,6 +76,11 @@ int readPng(mem::stack* const pScratch, const char* _Path) noexcept {
 	return -1;
 }
 
+using ControlFlow = uint32_t;
+enum ControlFlowBits : ControlFlow {
+	CONTROL_FLOW_CANVAS_UPDATE = 1u << 0
+};
+
 int main() {
 	mem::stack scratch;
 
@@ -88,6 +93,8 @@ int main() {
 
 	DisplayContext windowCtx = nullptr;
 	DisplayWindow window = nullptr;
+
+	EventBuffer eventBuffer = nullptr;
 
 	VulkanContext vulkanCtx = nullptr;
 	Emulator emulator = nullptr;
@@ -109,9 +116,21 @@ int main() {
 			createInfo.flags = WINDOW_CREATE_FULLSCREEN_BIT | WINDOW_CREATE_RESIZABLE_BIT;
 			createInfo.width = 800u;
 			createInfo.height = 600u;
+			createInfo.x = -100;
 			createInfo.title = "My Window";
 
 			failure = createDisplayWindow(windowCtx, &createInfo, &window);
+		}
+
+		if (failure)
+			break;
+
+		{
+			EventBufferCreateInfo createInfo{};
+			createInfo.eventMask = WINDOW_EVENT_ALL_BIT;
+			createInfo.size = 64u;
+			
+			failure = createEventBuffer(&createInfo, &eventBuffer);
 		}
 
 		if (failure)
@@ -181,28 +200,32 @@ int main() {
 		if (failure)
 			break;
 
-		mem::span<WindowEvent> windowEvents = scratch.alloc<WindowEvent>(64u);
+		ControlFlow flow = 0;
 
-		while (!failure) {
-			WindowEventMask eventMask = WINDOW_EVENT_MASK_CLOSE_BIT | WINDOW_EVENT_MASK_RESIZE_BIT;
-			size_t eventCount = pollWindowEvents(windowCtx, &eventMask, windowEvents, windowEvents.size());
+		while (true) {
+			WindowEventFlags events = 0;
 
-			if (eventMask & WINDOW_EVENT_MASK_CLOSE_BIT)
-				break;
+			while (pollWindowEvents(windowCtx, eventBuffer))
+				resolveWindowEvents(eventBuffer, window, &events);
+
+			if (events) {
+				if (events & WINDOW_EVENT_CLOSE_BIT)
+					break;
+				
+				flow |= events & WINDOW_EVENT_RESIZE_BIT ? CONTROL_FLOW_CANVAS_UPDATE : 0u;
+			}
 			
-			if (eventMask & WINDOW_EVENT_MASK_RESIZE_BIT)
+			if (flow & CONTROL_FLOW_CANVAS_UPDATE)
 				updateCanvas(canvas);
 
 			failure = draw(canvas, renderer, renderBox);
+
 		}
 
 		if (failure)
 			break;
 
-		failure = waitEmulator(emulator);
-
-		if (failure)
-			break;
+		while (waitRenderer(renderer));
 
 		destroyRenderer(renderer);
 		destroyRenderBox(renderBox);
@@ -211,6 +234,7 @@ int main() {
 		destroyEmulator(emulator);
 		destroyVulkanContext(vulkanCtx);
 
+		destroyEventBuffer(eventBuffer);
 		destroyDisplayWindow(windowCtx, window);
 		destroyDisplayContext(windowCtx);
 
@@ -218,7 +242,8 @@ int main() {
 		
 	} while (false);
 
-	while (waitEmulator(emulator));
+	if (emulator)
+		while (waitEmulator(emulator));
 
 	if (renderer)
 		destroyRenderer(renderer);
@@ -234,6 +259,9 @@ int main() {
 	
 	if (vulkanCtx)
 		destroyVulkanContext(vulkanCtx);
+
+	if (eventBuffer)
+		destroyEventBuffer(eventBuffer);
 
 	if (window)
 		destroyDisplayWindow(windowCtx, window);

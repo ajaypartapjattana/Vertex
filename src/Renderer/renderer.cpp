@@ -747,6 +747,7 @@ struct Canvas_T {
 	mem::span<VkImageView> imageView;
 
 	mem::span<VkFramebuffer> framebuffer;
+	mem::span<VkFence> fence;
 };
 
 int createCanvas(Emulator const _Emulator, const CanvasCreateInfo* const pCreateInfo, mem::stack* const pScratch, Canvas* const pCanvas) noexcept {
@@ -762,6 +763,7 @@ int createCanvas(Emulator const _Emulator, const CanvasCreateInfo* const pCreate
 	mem::span<VkImageView> _imageView;
 
 	mem::span<VkFramebuffer> _framebuffer;
+	mem::span<VkFence> _fence;
 
 	do {
 		VkResult result;
@@ -1020,6 +1022,13 @@ int createCanvas(Emulator const _Emulator, const CanvasCreateInfo* const pCreate
 		if (result != VK_SUCCESS)
 			break;
 
+		_fence = { new(std::nothrow) VkFence[imageCount], (size_t)imageCount };
+		
+		if (!_fence)
+			break;
+
+		_fence.assign_default();
+
 		Canvas const canvas = new(std::nothrow) Canvas_T;
 
 		if (!canvas)
@@ -1027,6 +1036,7 @@ int createCanvas(Emulator const _Emulator, const CanvasCreateInfo* const pCreate
 
 		pScratch->restore();
 
+		canvas->fence = _fence;
 		canvas->framebuffer = _framebuffer;
 
 		canvas->imageView = _imageView;
@@ -1052,6 +1062,9 @@ int createCanvas(Emulator const _Emulator, const CanvasCreateInfo* const pCreate
 	} while (false);
 
 	pScratch->restore();
+
+	if (_fence)
+		delete[] _fence;
 
 	if (_framebuffer) {
 		const VkFramebuffer* const pFramebufferEnd = _framebuffer.pEnd;
@@ -1087,6 +1100,8 @@ int createCanvas(Emulator const _Emulator, const CanvasCreateInfo* const pCreate
 void destroyCanvas(Canvas const _Canvas) noexcept {
 	const VkDevice device = _Canvas->device;
 
+	delete[] _Canvas->fence;
+
 	const VkFramebuffer* const pFramebufferEnd = _Canvas->framebuffer.pEnd;
 	for (const VkFramebuffer* pFramebuffer{ _Canvas->framebuffer.pBegin }; pFramebuffer != pFramebufferEnd; ++pFramebuffer)
 		vkDestroyFramebuffer(device, *pFramebuffer, nullptr);
@@ -1118,6 +1133,7 @@ int updateCanvas(Canvas const _Canvas) noexcept {
 	mem::span<VkImageView> _imageView;
 
 	mem::span<VkFramebuffer> _framebuffer;
+	mem::span<VkFence> _fence;
 
 	do {
 		VkResult result;
@@ -1249,10 +1265,21 @@ int updateCanvas(Canvas const _Canvas) noexcept {
 		if (result != VK_SUCCESS)
 			break;
 
-		result = vkDeviceWaitIdle(device);
+		_fence = { new(std::nothrow) VkFence[imageCount], (size_t)imageCount };
+
+		if (!_fence)
+			break;
+
+		_fence.assign_default();
+
+		const VkFence* const pFenceEnd = _Canvas->fence.pEnd;
+		for (const VkFence* pFence{ _Canvas->fence.pBegin }; pFence != pFenceEnd && result == VK_SUCCESS; ++pFence)
+			result = *pFence ? vkWaitForFences(device, 1u, pFence, VK_TRUE, UINT64_MAX) : VK_SUCCESS;
 
 		if (result != VK_SUCCESS)
 			break;
+
+		delete[] _Canvas->fence;
 
 		const VkFramebuffer* const pFramebufferEnd = _Canvas->framebuffer.pEnd;
 		for (const VkFramebuffer* pFramebuffer{ _Canvas->framebuffer.pBegin }; pFramebuffer != pFramebufferEnd; ++pFramebuffer)
@@ -1269,6 +1296,7 @@ int updateCanvas(Canvas const _Canvas) noexcept {
 
 		vkDestroySwapchainKHR(device, _Canvas->swapchain, nullptr);
 
+		_Canvas->fence = _fence;
 		_Canvas->framebuffer = _framebuffer;
 		_Canvas->imageView = _imageView;
 		_Canvas->image = _image;
@@ -1279,6 +1307,9 @@ int updateCanvas(Canvas const _Canvas) noexcept {
 		return 0;
 
 	} while (false);
+
+	if (_fence)
+		delete[] _fence;
 
 	if (_framebuffer) {
 		const VkFramebuffer* const pFramebufferEnd = _framebuffer.pEnd;
@@ -1681,7 +1712,6 @@ struct Renderer_T {
 	mem::span<VkSemaphore> imageSemaphore;
 	mem::span<VkSemaphore> renderSemaphore;
 	mem::span<VkFence> frameFence;
-	mem::span<VkFence> imageFence;
 	
 	uint32_t bufferedFrames;
 	uint32_t frame;
@@ -1695,7 +1725,6 @@ int createRenderer(Emulator const _Emulator, Canvas const _Canvas, RenderBox con
 	mem::span<VkSemaphore> _imageSemaphore;
 	mem::span<VkSemaphore> _renderSemaphore;
 	mem::span<VkFence> _frameFence;
-	mem::span<VkFence> _imageFence;
 
 	do {
 		VkResult result;
@@ -1795,12 +1824,7 @@ int createRenderer(Emulator const _Emulator, Canvas const _Canvas, RenderBox con
 		if (result != VK_SUCCESS)
 			break;
 
-		_imageFence = { new(std::nothrow) VkFence[swapchainImageCount], swapchainImageCount };
 		
-		if (!_imageFence)
-			break;
-
-		_imageFence.assign_default();
 
 		Renderer const renderer = new(std::nothrow) Renderer_T;
 
@@ -1810,7 +1834,6 @@ int createRenderer(Emulator const _Emulator, Canvas const _Canvas, RenderBox con
 		renderer->frame = 0;
 		renderer->bufferedFrames = pCreateInfo->maxFrameBuffering;
 
-		renderer->imageFence = _imageFence;
 		renderer->frameFence = _frameFence;
 		renderer->renderSemaphore = _renderSemaphore;
 		renderer->imageSemaphore = _imageSemaphore;
@@ -1826,9 +1849,6 @@ int createRenderer(Emulator const _Emulator, Canvas const _Canvas, RenderBox con
 		return 0;
 
 	} while (false);
-
-	if (_imageFence)
-		delete[] _imageFence;
 
 	if (_frameFence) {
 		const VkFence* const pFenceEnd = _frameFence.pEnd;
@@ -1866,8 +1886,6 @@ int createRenderer(Emulator const _Emulator, Canvas const _Canvas, RenderBox con
 void destroyRenderer(Renderer const _Renderer) noexcept {
 	const VkDevice device = _Renderer->device;
 
-	delete[] _Renderer->imageFence;
-
 	const VkFence* const pFenceEnd = _Renderer->frameFence.pEnd;
 	for (const VkFence* pFence{ _Renderer->frameFence.pBegin }; pFence != pFenceEnd; ++pFence)
 		vkDestroyFence(device, *pFence, nullptr);
@@ -1893,22 +1911,33 @@ void destroyRenderer(Renderer const _Renderer) noexcept {
 	delete _Renderer;
 }
 
-int bindCanvas(Canvas const _Canvas, Renderer const _Renderer) noexcept {
-
-}
-
 int waitRenderer(Renderer const _Renderer) noexcept {
 	const VkDevice device = _Renderer->device;
-	const uint32_t fenceCount = _Renderer->bufferedFrames;
 
-	VkResult result = vkWaitForFences(device, fenceCount, _Renderer->frameFence, VK_TRUE, UINT64_MAX);
+	do {
+		VkResult result;
 
-	if (result == VK_SUCCESS)
+		result = vkQueueWaitIdle(_Renderer->graphics);
+
+		if (result == VK_TIMEOUT)
+			return 1;
+
+		if (result != VK_SUCCESS)
+			break;
+
+		result = vkQueueWaitIdle(_Renderer->present);
+
+		if (result == VK_TIMEOUT)
+			return 1;
+
+		if (result != VK_SUCCESS)
+			break;
+		
 		return 0;
-	else if (result == VK_TIMEOUT)
-		return 1;
-	else
-		return -1;
+
+	} while (false);
+
+	return -1;
 }
 
 int draw(Canvas const _Canvas, Renderer const _Renderer, RenderBox const _RenderBox) noexcept {
@@ -1932,10 +1961,13 @@ int draw(Canvas const _Canvas, Renderer const _Renderer, RenderBox const _Render
 		uint32_t imageIndex;
 		result = vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, imageAvailable, VK_NULL_HANDLE, &imageIndex);
 
+		if (result == VK_ERROR_OUT_OF_DATE_KHR)
+			return 1;
+
 		if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
 			break;
 		
-		VkFence imageFence = _Renderer->imageFence[imageIndex];
+		VkFence imageFence = _Canvas->fence[imageIndex];
 
 		if (!imageFence)
 			imageFence = frameFence;
@@ -2034,7 +2066,7 @@ int draw(Canvas const _Canvas, Renderer const _Renderer, RenderBox const _Render
 		if (result != VK_SUCCESS)
 			break;
 
-		_Renderer->imageFence[imageIndex] = frameFence;
+		_Canvas->fence[imageIndex] = frameFence;
 
 		{
 			VkPresentInfoKHR presentInfo{};
@@ -2049,12 +2081,15 @@ int draw(Canvas const _Canvas, Renderer const _Renderer, RenderBox const _Render
 
 			result = vkQueuePresentKHR(_Renderer->present, &presentInfo);
 		}
+		
+		_Renderer->frame++;
+		_Renderer->frame = _Renderer->frame == _Renderer->bufferedFrames ? 0 : _Renderer->frame;
+
+		if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+			return 1;
 
 		if (result != VK_SUCCESS)
 			break;
-
-		_Renderer->frame++;
-		_Renderer->frame = _Renderer->frame == _Renderer->bufferedFrames ? 0 : _Renderer->frame;
 
 		return 0;
 
