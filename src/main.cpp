@@ -76,9 +76,11 @@ int readPng(mem::stack* const pScratch, const char* _Path) noexcept {
 	return -1;
 }
 
-using ControlFlow = uint32_t;
-enum ControlFlowBits : ControlFlow {
-	CONTROL_FLOW_CANVAS_UPDATE = 1u << 0
+using FlowControl = uint32_t;
+enum FlowControlBits : FlowControl {
+	FLOW_CONTROL_HALT_BIT = 1u << 0,
+	FLOW_CONTROL_DIRTY_EXTENT_BIT = 1u << 1,
+	FLOW_CONTROL_WAIT_BIT = 1u << 2
 };
 
 int main() {
@@ -200,7 +202,7 @@ int main() {
 		if (failure)
 			break;
 
-		ControlFlow flow = 0;
+		FlowControl control = 0;
 
 		while (true) {
 			WindowEventFlags events = 0;
@@ -209,17 +211,38 @@ int main() {
 				resolveWindowEvents(eventBuffer, window, &events);
 
 			if (events) {
-				if (events & WINDOW_EVENT_CLOSE_BIT)
-					break;
-				
-				flow |= events & WINDOW_EVENT_RESIZE_BIT ? CONTROL_FLOW_CANVAS_UPDATE : 0u;
+				control |= events & WINDOW_EVENT_CLOSE_BIT ? FLOW_CONTROL_HALT_BIT : 0u;
+				control |= events & WINDOW_EVENT_RESIZED_BIT ? FLOW_CONTROL_DIRTY_EXTENT_BIT : 0u;
+				control |= events & WINDOW_EVENT_MINIMIZED_BIT ? FLOW_CONTROL_WAIT_BIT : 0u;			
 			}
+
+			if (control & FLOW_CONTROL_HALT_BIT)
+				break;
 			
-			if (flow & CONTROL_FLOW_CANVAS_UPDATE)
-				updateCanvas(canvas);
+			if (control & FLOW_CONTROL_DIRTY_EXTENT_BIT) {
+				failure = updateCanvas(canvas);
+
+				if (failure)
+					break;
+
+				control &= ~FLOW_CONTROL_DIRTY_EXTENT_BIT;
+			}
+
+			if (control & FLOW_CONTROL_WAIT_BIT) {
+				if (waitWindowEvents(windowCtx, eventBuffer))
+					resolveWindowEvents(eventBuffer, window, &events);
+				else
+					break;
+
+				control &= ~FLOW_CONTROL_WAIT_BIT;
+			}
 
 			failure = draw(canvas, renderer, renderBox);
 
+			if (failure == -1)
+				break;
+
+			control |= failure != 1 ? 0u : FLOW_CONTROL_DIRTY_EXTENT_BIT;
 		}
 
 		if (failure)

@@ -46,10 +46,10 @@ void setWindowTitle(DisplayContext const _Context, DisplayWindow const _Window, 
 using WindowEventFlags = uint32_t;
 enum WindowEventFlagBit : WindowEventFlags {
 	WINDOW_EVENT_CLOSE_BIT = 1u << 0,
-	WINDOW_EVENT_RESIZE_BIT = 1u << 1,
-	WINDOW_EVENT_MOVE_BIT = 1u << 2,
-	WINDOW_EVENT_FOCUS_GAINED_BIT = 1u << 3,
-	WINDOW_EVENT_FOCUS_LOST_BIT = 1u << 4,
+	WINDOW_EVENT_MINIMIZED_BIT = 1u << 1,
+	WINDOW_EVENT_RESIZED_BIT = 1u << 2,
+	WINDOW_EVENT_MOVED_BIT = 1u << 3,
+	WINDOW_EVENT_FOCUSED_BIT = 1u << 4,
 	WINDOW_EVENT_ALL_BIT = ~0u
 };
 
@@ -64,7 +64,8 @@ using EventBuffer = EventBuffer_T*;
 int createEventBuffer(const EventBufferCreateInfo* const pCreateInfo, EventBuffer* const pEventBuffer) noexcept;
 void destroyEventBuffer(EventBuffer const _EventBuffer) noexcept;
 
-bool pollWindowEvents(DisplayContext const _Context, EventBuffer const _Buffer) noexcept;
+bool pollWindowEvents(DisplayContext const _Context, EventBuffer const _EventBuffer) noexcept;
+bool waitWindowEvents(DisplayContext const _Context, EventBuffer const _EventBuffer) noexcept;
 void resolveWindowEvents(EventBuffer const _EventBuffer, DisplayWindow const _Window, WindowEventFlags* const pEventFlags) noexcept;
 
 struct VulkanSurfaceDependencyInfo {

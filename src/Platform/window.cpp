@@ -108,6 +108,7 @@ struct DisplayContext_T {
 
 	xcb_atom_t wmProtocols;
 	xcb_atom_t wmDeleteWindow;
+	xcb_atom_t wmState;
 	xcb_atom_t netActiveWindow;
 };
 
@@ -130,6 +131,11 @@ int requestDisplayContext(DisplayContext* const pContext) noexcept {
 		if (wmDeleteWindow == XCB_ATOM_NONE)
 			break;
 
+		const xcb_atom_t wmState = internAtom(_connection, "WM_STATE");
+
+		if (wmState == XCB_ATOM_NONE)
+			break;
+
 		const xcb_atom_t netActiveWindow = internAtom(_connection, "_NET_ACTIVE_WINDOW");
 
 		if (netActiveWindow == XCB_ATOM_NONE)
@@ -140,7 +146,8 @@ int requestDisplayContext(DisplayContext* const pContext) noexcept {
 		if (!pContext)
 			break;
 
-		context->netActiveWindow = netActiveWindow;			
+		context->netActiveWindow = netActiveWindow;
+		context->wmState = wmState;
 		context->wmProtocols = wmProtocols;
 		context->wmDeleteWindow = wmDeleteWindow;
 			
@@ -187,7 +194,7 @@ int createDisplayWindow(const DisplayContext _Context, const WindowCreateInfo* c
 		_window = xcb_generate_id(connection);
 		
 		uint32_t mask = XCB_CW_BACK_PIXEL | XCB_CW_EVENT_MASK;
-		uint32_t values[] = { screen->black_pixel, XCB_EVENT_MASK_EXPOSURE | XCB_EVENT_MASK_STRUCTURE_NOTIFY | XCB_EVENT_MASK_FOCUS_CHANGE };
+		uint32_t values[] = { screen->black_pixel, XCB_EVENT_MASK_EXPOSURE | XCB_EVENT_MASK_STRUCTURE_NOTIFY | XCB_EVENT_MASK_PROPERTY_CHANGE | XCB_EVENT_MASK_FOCUS_CHANGE };
 		
 		xcb_void_cookie_t cookie = xcb_create_window_checked(connection, XCB_COPY_FROM_PARENT, _window, screen->root, pCreateInfo->x, pCreateInfo->y, pCreateInfo->width, pCreateInfo->height, 0, XCB_WINDOW_CLASS_INPUT_OUTPUT, screen->root_visual, mask, values);
 
@@ -312,6 +319,8 @@ enum WindowEventType : uint32_t {
 	WINDOW_EVENT_TYPE_WINDOW_CONFIGURE,
 	WINDOW_EVENT_TYPE_FOCUS_GAINED,
 	WINDOW_EVENT_TYPE_FOCUS_LOST,
+	WINDOW_EVENT_TYPE_MINIMIZE,
+	WINDOW_EVENT_TYPE_RESTORED,
 	WINDOW_EVENT_TYPE_WINDOW_CLOSE
 };
 
@@ -370,79 +379,125 @@ void destroyEventBuffer(EventBuffer const _EventBuffer) noexcept {
 	delete _EventBuffer;
 }
 
-bool pollWindowEvents(DisplayContext const _Context, EventBuffer const _Buffer) noexcept {
+static inline bool translateXCBEvent(DisplayContext const _Context, xcb_generic_event_t* const pXCBEvent, WindowEvent* const pEvent) noexcept {
+	const uint8_t type = pXCBEvent->response_type & ~0x80;
+
+	switch (type) {
+	case XCB_CONFIGURE_NOTIFY: {
+		const xcb_configure_notify_event_t* const configure = reinterpret_cast<xcb_configure_notify_event_t*>(pXCBEvent);
+
+		pEvent->window = configure->window;
+		pEvent->type = WINDOW_EVENT_TYPE_WINDOW_CONFIGURE;
+
+		pEvent->extent = { configure->width, configure->height };
+		pEvent->position = { configure->x, configure->y };
+	}
+
+		return true;
+
+	case XCB_FOCUS_IN: {
+		const xcb_focus_in_event_t* const focus = reinterpret_cast<xcb_focus_in_event_t*>(pXCBEvent);
+
+		pEvent->window = focus->event;
+		pEvent->type = WINDOW_EVENT_TYPE_FOCUS_GAINED;
+	}
+
+		return true;
+
+	case XCB_FOCUS_OUT: {
+		const xcb_focus_out_event_t* const focus = reinterpret_cast<xcb_focus_out_event_t*>(pXCBEvent);
+
+		pEvent->window = focus->event;
+		pEvent->type = WINDOW_EVENT_TYPE_FOCUS_LOST;
+	}
+
+		return true;
+
+	case XCB_PROPERTY_NOTIFY: {
+		const xcb_property_notify_event_t* const property = reinterpret_cast<xcb_property_notify_event_t*>(pXCBEvent);
+
+		if (property->atom != _Context->wmState)
+			break;
+
+		xcb_get_property_cookie_t cookie = xcb_get_property(_Context->connection, 0, property->window, _Context->wmState, XCB_ATOM_ANY, 0, 2);
+
+		xcb_get_property_reply_t* reply = xcb_get_property_reply(_Context->connection, cookie, nullptr);
+
+		if (!reply)
+			break;
+
+		if (reply->format == 32 && reply->type == _Context->wmState && reply->value_len) {
+			const uint32_t state = *static_cast<const uint32_t*>(xcb_get_property_value(reply));
+
+			pEvent->window = property->window;
+
+			if (state == XCB_ICCCM_WM_STATE_ICONIC)
+				pEvent->type = WINDOW_EVENT_TYPE_MINIMIZE;
+			else if (state == XCB_ICCCM_WM_STATE_NORMAL)
+				pEvent->type = WINDOW_EVENT_TYPE_RESTORED;
+
+			std::free(reply);
+			return true;
+		}
+
+		std::free(reply);
+	}
+
+		break;
+
+	case XCB_CLIENT_MESSAGE: {
+		const xcb_client_message_event_t* const message = reinterpret_cast<xcb_client_message_event_t*>(pXCBEvent);
+
+		if (message->type != _Context->wmProtocols)
+			break;
+
+		if (message->data.data32[0] != _Context->wmDeleteWindow)
+			break;
+
+		pEvent->window = message->window;
+		pEvent->type = WINDOW_EVENT_TYPE_WINDOW_CLOSE;
+	}
+
+		return true;
+
+	}
+
+	return false;
+}
+
+bool pollWindowEvents(DisplayContext const _Context, EventBuffer const _EventBuffer) noexcept {
 	xcb_connection_t* const connection = _Context->connection;
 
-	WindowEvent* pEvent = _Buffer->event.pBegin;
-	const WindowEvent* const pEventEnd = _Buffer->event.pEnd;
+	WindowEvent* pEvent = _EventBuffer->event.pBegin;
+	const WindowEvent* const pEventEnd = _EventBuffer->event.pEnd;
 	while (pEvent != pEventEnd) {
 		xcb_generic_event_t* const event = xcb_poll_for_event(connection);
 
 		if (!event)
 			break;
-		
-		const uint8_t type = event->response_type & ~0x80;
 
-		switch (type) {
-		case XCB_CONFIGURE_NOTIFY: {
-			const xcb_configure_notify_event_t* const configure = reinterpret_cast<xcb_configure_notify_event_t*>(event);
-
-			pEvent->window = configure->window;
-			pEvent->type = WINDOW_EVENT_TYPE_WINDOW_CONFIGURE;
-
-			pEvent->extent = { configure->width, configure->height };
-			pEvent->position = { configure->x, configure->y };
-			
+		if (translateXCBEvent(_Context, event, pEvent))
 			++pEvent;
-		}
-
-			break;
-
-		case XCB_FOCUS_IN: {
-			const xcb_focus_in_event_t* const focus = reinterpret_cast<xcb_focus_in_event_t*>(event);
-
-			pEvent->window = focus->event;
-			pEvent->type = WINDOW_EVENT_TYPE_FOCUS_GAINED;
-			
-			++pEvent;
-		}
-
-			break;
-
-		case XCB_FOCUS_OUT: {
-			const xcb_focus_out_event_t* const focus = reinterpret_cast<xcb_focus_out_event_t*>(event);
-
-			pEvent->window = focus->event;
-			pEvent->type = WINDOW_EVENT_TYPE_FOCUS_LOST;
-		}
-
-			break;
-
-		case XCB_CLIENT_MESSAGE: {
-			const xcb_client_message_event_t* const message = reinterpret_cast<xcb_client_message_event_t*>(event);
-
-			if (message->type != _Context->wmProtocols)
-				break;
-
-			if (message->data.data32[0] != _Context->wmDeleteWindow)
-				break;
-
-			pEvent->window = message->window;
-			pEvent->type = WINDOW_EVENT_TYPE_WINDOW_CLOSE;
-
-			++pEvent;
-		}
-
-			break;
-
-		}
 
 		std::free(event);
 	}
 
-	_Buffer->count = static_cast<uint32_t>(pEvent - _Buffer->event.pBegin);
+	_EventBuffer->count = static_cast<uint32_t>(pEvent - _EventBuffer->event.pBegin);
 
-	return _Buffer->count != 0;
+	return _EventBuffer->count != 0;
+}
+
+bool waitWindowEvents(DisplayContext const _Context, EventBuffer const _EventBuffer) noexcept {
+	xcb_generic_event_t* const event = xcb_wait_for_event(_Context->connection);
+	
+	if (!event)
+		return false;
+
+	if (translateXCBEvent(_Context, event, _EventBuffer->event.pBegin + _EventBuffer->count))
+		_EventBuffer->count++;
+
+	std::free(event);
+	return true;
 }
 
 void resolveWindowEvents(EventBuffer const _EventBuffer, DisplayWindow const _Window, WindowEventFlags* const pEventFlags) noexcept {
@@ -459,13 +514,13 @@ void resolveWindowEvents(EventBuffer const _EventBuffer, DisplayWindow const _Wi
 		switch (pEvent->type) {
 		case WINDOW_EVENT_TYPE_WINDOW_CONFIGURE:
 			if (pEvent->extent.width != _Window->width || pEvent->extent.height != _Window->height) {
-				events |= WINDOW_EVENT_RESIZE_BIT;
+				events |= WINDOW_EVENT_RESIZED_BIT;
 				_Window->width = pEvent->extent.width;
 				_Window->height = pEvent->extent.height;
 			}
 			
 			if (pEvent->position.x != _Window->x || pEvent->position.y != _Window->y) {
-				events |= WINDOW_EVENT_MOVE_BIT;
+				events |= WINDOW_EVENT_MOVED_BIT;
 				_Window->x = pEvent->position.x;
 				_Window->y = pEvent->position.y;
 			}
@@ -473,12 +528,22 @@ void resolveWindowEvents(EventBuffer const _EventBuffer, DisplayWindow const _Wi
 			break;
 			
 		case WINDOW_EVENT_TYPE_FOCUS_GAINED:
-			events |= WINDOW_EVENT_FOCUS_GAINED_BIT;
+			events |= WINDOW_EVENT_FOCUSED_BIT;
 
 			break;
 
 		case WINDOW_EVENT_TYPE_FOCUS_LOST:
-			events |= WINDOW_EVENT_FOCUS_LOST_BIT;
+			events &= ~WINDOW_EVENT_FOCUSED_BIT;
+
+			break;
+
+		case WINDOW_EVENT_TYPE_MINIMIZE:
+			events |= WINDOW_EVENT_MINIMIZED_BIT;
+			
+			break;
+
+		case WINDOW_EVENT_TYPE_RESTORED:
+			events &= ~WINDOW_EVENT_MINIMIZED_BIT;
 
 			break;
 
@@ -490,6 +555,7 @@ void resolveWindowEvents(EventBuffer const _EventBuffer, DisplayWindow const _Wi
 		}
 	}
 
+	_EventBuffer->count = 0;
 	*pEventFlags |= events & _EventBuffer->mask;
 }
 
