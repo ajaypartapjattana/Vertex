@@ -194,7 +194,7 @@ int main() {
 
 		{
 			RendererCreateInfo createInfo{};
-			createInfo.maxFrameBuffering = 2u;
+			createInfo.maxRenderProcess = 2u;
 
 			failure = createRenderer(emulator, canvas, renderBox, &createInfo, &renderer);
 		}

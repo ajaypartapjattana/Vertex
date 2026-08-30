@@ -26,6 +26,8 @@ namespace rndr {
 		size_t count;
 	};
 
+	
+
 	class TransferStage {
 	private:
 		mem::span<uint8_t> stageSpan;

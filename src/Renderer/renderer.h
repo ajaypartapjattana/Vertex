@@ -1,5 +1,7 @@
 #pragma once
 
+#include <glm/glm.hpp>
+
 #include <core/Memory/memory.h>
 
 struct VulkanContext_T;
@@ -24,34 +26,47 @@ void destroyEmulator(Emulator const _Emulator) noexcept;
 
 int waitEmulator(Emulator const _Emulator) noexcept;
 
-struct ResourceSet_T;
-using ResourceSet = ResourceSet_T*;
-
-struct ResourceSetAllocateInfo {
-	uint32_t textureCount;
-	uint32_t objectCount;
-};
-
-int allocateStaticResourceSet(Emulator const _Emulator, const ResourceSetAllocateInfo* const pAllocateInfo, ResourceSet* const pResourceSet) noexcept;
-void resetStaticResourceSet(Emulator const _Emulator, ResourceSet const _ResourceSet) noexcept;
-
-struct RenderObjectCreateInfo {
-	const void* pVertex;
-	size_t vertexBufferSize;
-	const void* pIndex;
-	size_t indexBufferSize;
-};
-
 struct AsyncLoader_T;
 using AsyncLoader = AsyncLoader_T*;
 
 struct AsyncLoaderCreateInfo {
 	size_t stageSize;
-	uint32_t maxAsyncLoadRate;
+	uint32_t maxLoadProcess;
 };
 
 int createAsyncLoader(Emulator const _Emulator, const AsyncLoaderCreateInfo* const pCreateInfo, AsyncLoader* const pAsyncLoader) noexcept;
 void destroyAsyncLoader(AsyncLoader const _AsynLoader) noexcept;
+
+struct ProcessCookie_T;
+using ProcessCookie = ProcessCookie_T*;
+
+int allocateProcessCookie(ProcessCookie* const pProcessCookie) noexcept;
+void freeProcessCookie(ProcessCookie const _ProcessCookie) noexcept;
+
+struct Scene_T;
+using Scene = Scene_T*;
+
+struct SceneCreateInfo {
+	uint32_t modelCount;
+};
+
+int createScene(const SceneCreateInfo* const pCreateInfo, Scene* const pScene) noexcept;
+
+struct Model_T;
+using Model = Model_T*;
+
+struct Vertex {
+	glm::vec2 pos;
+	glm::vec3 color;
+};
+
+struct ModelCreateInfo {
+	const Vertex* pVertex;
+	size_t vertexCount;
+};
+
+int loadModel(AsyncLoader const _AsynLoader, Scene const _Scene, const ModelCreateInfo* const pCreateInfo, Model* const pModel, ProcessCookie const _ProcessCookie) noexcept;
+void releaseModel(Scene const _Scene, Model const _Model) noexcept;
 
 struct Canvas_T;
 using Canvas = Canvas_T*;
@@ -75,15 +90,13 @@ struct Renderer_T;
 using Renderer = Renderer_T*;
 
 struct RendererCreateInfo {
-	uint32_t maxFrameBuffering;
+	uint32_t maxRenderProcess;
 };
 
-int createRenderer(Emulator const _Emulator, Canvas const _Canvas, RenderBox const _RenderBox, const RendererCreateInfo* const pCreateInfo, Renderer* const pRenderer) noexcept;
+int createRenderer(Emulator const _Emulator, const RendererCreateInfo* const pCreateInfo, Renderer* const pRenderer) noexcept;
 void destroyRenderer(Renderer const _Renderer) noexcept;
 
 int waitRenderer(Renderer const _Renderer) noexcept;
 
 int draw(Canvas const _Canvas, Renderer const _Renderer, RenderBox const _RenderBox) noexcept;
-
-int defferedLoadObject(AsyncLoader const _AsyncLoader, ResourceSet const _ResourceSet, const RenderObjectCreateInfo* const pCreateInfo) noexcept;
 

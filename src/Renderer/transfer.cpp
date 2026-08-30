@@ -53,10 +53,8 @@ namespace rndr {
 	}
 
 	int TransferStage::streamBufferUpload(const DataSource* const pSource, VkDeviceSize* const pOffset, VkBufferCopy* const pRegion) noexcept {
-		assert(pSource && pOffset && pRegion && pSource->pData);
-
 		if (!pSource->size)
-			return VK_SUCCESS;
+			return -1;
 
 		DataSource source = { reinterpret_cast<const uint8_t*>(pSource->pData) + pRegion->srcOffset, pSource->size - pRegion->srcOffset };
 
@@ -65,17 +63,15 @@ namespace rndr {
 		StageChunk chunk{};
 		int result = commitChunk(&source, &bufferGranularity, 1, &chunk);
 
-		if (result == -1) {
-			stats.failures++;
-		}
-		else {
-			pRegion->srcOffset = chunk.offset;
-			pRegion->dstOffset = *pOffset;
-			pRegion->size = chunk.size;
+		if (result < 0)
+			return -1;
 
-			*pOffset += chunk.size;
-		}
+		pRegion->srcOffset = chunk.offset;
+		pRegion->dstOffset = *pOffset;
+		pRegion->size = chunk.size;
 
+		*pOffset += chunk.size;
+		
 		return result;
 	}
 
