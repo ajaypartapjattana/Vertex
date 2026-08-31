@@ -43,6 +43,8 @@ using ProcessCookie = ProcessCookie_T*;
 int allocateProcessCookie(ProcessCookie* const pProcessCookie) noexcept;
 void freeProcessCookie(ProcessCookie const _ProcessCookie) noexcept;
 
+int waitProcess(Emulator const _Emulator, ProcessCookie const _Cookie) noexcept;
+
 struct Scene_T;
 using Scene = Scene_T*;
 
@@ -50,7 +52,8 @@ struct SceneCreateInfo {
 	uint32_t modelCount;
 };
 
-int createScene(const SceneCreateInfo* const pCreateInfo, Scene* const pScene) noexcept;
+int createScene(Emulator const _Emulator, const SceneCreateInfo* const pCreateInfo, Scene* const pScene) noexcept;
+void destroyScene(Scene const _Scene) noexcept;
 
 struct Model_T;
 using Model = Model_T*;
@@ -91,6 +94,7 @@ using Renderer = Renderer_T*;
 
 struct RendererCreateInfo {
 	uint32_t maxRenderProcess;
+	uint32_t callDrawLimit;
 };
 
 int createRenderer(Emulator const _Emulator, const RendererCreateInfo* const pCreateInfo, Renderer* const pRenderer) noexcept;
@@ -98,5 +102,5 @@ void destroyRenderer(Renderer const _Renderer) noexcept;
 
 int waitRenderer(Renderer const _Renderer) noexcept;
 
-int draw(Canvas const _Canvas, Renderer const _Renderer, RenderBox const _RenderBox) noexcept;
+int draw(Canvas const _Canvas, Renderer const _Renderer, RenderBox const _RenderBox, Scene const _Scene) noexcept;
 

@@ -758,7 +758,7 @@ int createStageAllocation(StagingState* const pStage, const StageAllocationCreat
 	memcpy(pStage->pHead, pAllocationInfo->data, pAllocationInfo->size);
 	
 	pAllocation->offset = static_cast<VkDeviceSize>(pStage->pHead - pStage->stage.pBegin);
-	pAllocation->size = static_cast<VkDeviceSize>(pAllocation->size);
+	pAllocation->size = static_cast<VkDeviceSize>(pAllocationInfo->size);
 
 	pStage->pHead += pAllocationInfo->size;
 	
@@ -797,7 +797,8 @@ enum ModelStateFlagBit : ModelStateFlags {
 struct Model_T {
 	VkBuffer vertex;
 	VmaAllocation vertexAllocation;
-	size_t count;
+	VkDeviceSize offset;
+	uint32_t count;
 	ModelStateFlags state;
 };
 
@@ -878,7 +879,7 @@ int loadModel(AsyncLoader const _AsynLoader, Scene const _Scene, const ModelCrea
 			createInfo.pNext = nullptr;
 			createInfo.flags = 0;
 			createInfo.size = static_cast<VkDeviceSize>(dataSize);
-			createInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+			createInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 			createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 			createInfo.queueFamilyIndexCount = 0;
 			createInfo.pQueueFamilyIndices = nullptr;
@@ -1001,6 +1002,8 @@ int loadModel(AsyncLoader const _AsynLoader, Scene const _Scene, const ModelCrea
 			_ProcessCookie->fence = fence;
 		}
 
+		_Scene->hint++;
+
 		return 0;
 
 	} while (false);
@@ -1015,6 +1018,20 @@ void releaseModel(Scene const _Scene, Model const _Model) noexcept {
 	const VmaAllocator allocator = _Scene->allocator;
 
 	vmaDestroyBuffer(allocator, _Model->vertex, _Model->vertexAllocation);
+}
+
+int waitProcess(Emulator const _Emulator, ProcessCookie const _Cookie) noexcept {
+	do {
+		VkResult result = vkWaitForFences(_Emulator->device, 1u, &_Cookie->fence, VK_TRUE, UINT64_MAX);
+
+		if (result != VK_SUCCESS)
+			break;
+
+		return 0;
+
+	} while (false);
+
+	return -1;
 }
 
 struct Canvas_T {
@@ -1825,7 +1842,7 @@ int createRenderBox(Emulator const _Emulator, Canvas const _Canvas, mem::stack* 
 			vertexInputState.flags = 0;
 			vertexInputState.vertexBindingDescriptionCount = 1;
 			vertexInputState.pVertexBindingDescriptions = binding;
-			vertexInputState.vertexAttributeDescriptionCount = 0;
+			vertexInputState.vertexAttributeDescriptionCount = 2u;
 			vertexInputState.pVertexAttributeDescriptions = attribute;
 
 			VkPipelineInputAssemblyStateCreateInfo inputAssemblyState{};
@@ -2010,6 +2027,8 @@ struct Renderer_T {
 	mem::span<VkSemaphore> renderSemaphore;
 	mem::span<VkFence> frameFence;
 	
+	mem::span<VkBuffer> buffer;
+
 	uint32_t bufferedFrames;
 	uint32_t frame;
 };
@@ -2022,6 +2041,8 @@ int createRenderer(Emulator const _Emulator, const RendererCreateInfo* const pCr
 	mem::span<VkSemaphore> _imageSemaphore;
 	mem::span<VkSemaphore> _renderSemaphore;
 	mem::span<VkFence> _frameFence;
+
+	mem::span<VkBuffer> _buffer;
 
 	do {
 		VkResult result;
@@ -2119,7 +2140,10 @@ int createRenderer(Emulator const _Emulator, const RendererCreateInfo* const pCr
 		if (result != VK_SUCCESS)
 			break;
 
-		
+		_buffer = { new(std::nothrow) VkBuffer[pCreateInfo->callDrawLimit], (size_t)pCreateInfo->callDrawLimit };
+
+		if (!_buffer)
+			break;
 
 		Renderer const renderer = new(std::nothrow) Renderer_T;
 
@@ -2128,6 +2152,8 @@ int createRenderer(Emulator const _Emulator, const RendererCreateInfo* const pCr
 		
 		renderer->frame = 0;
 		renderer->bufferedFrames = pCreateInfo->maxRenderProcess;
+
+		renderer->buffer = _buffer;
 
 		renderer->frameFence = _frameFence;
 		renderer->renderSemaphore = _renderSemaphore;
@@ -2144,6 +2170,9 @@ int createRenderer(Emulator const _Emulator, const RendererCreateInfo* const pCr
 		return 0;
 
 	} while (false);
+
+	if (_buffer)
+		delete[] _buffer;
 
 	if (_frameFence) {
 		const VkFence* const pFenceEnd = _frameFence.pEnd;
@@ -2180,6 +2209,8 @@ int createRenderer(Emulator const _Emulator, const RendererCreateInfo* const pCr
 
 void destroyRenderer(Renderer const _Renderer) noexcept {
 	const VkDevice device = _Renderer->device;
+
+	delete[] _Renderer->buffer;
 
 	const VkFence* const pFenceEnd = _Renderer->frameFence.pEnd;
 	for (const VkFence* pFence{ _Renderer->frameFence.pBegin }; pFence != pFenceEnd; ++pFence)
@@ -2235,7 +2266,7 @@ int waitRenderer(Renderer const _Renderer) noexcept {
 	return -1;
 }
 
-int draw(Canvas const _Canvas, Renderer const _Renderer, RenderBox const _RenderBox) noexcept {
+int draw(Canvas const _Canvas, Renderer const _Renderer, RenderBox const _RenderBox, Scene const _Scene) noexcept {
 	const VkDevice device = _Renderer->device;
 
 	do {
@@ -2325,7 +2356,15 @@ int draw(Canvas const _Canvas, Renderer const _Renderer, RenderBox const _Render
 
 		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-		vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+		const Model_T* const pModelEnd = _Scene->model.pBegin + _Scene->hint;
+		for (const Model_T* pModel{ _Scene->model.pBegin }; pModel != pModelEnd; ++pModel) {
+			if (!(pModel->state & MODEL_STATE_VISIBLE_BIT))
+				continue;
+
+			vkCmdBindVertexBuffers(commandBuffer, 0, 1, &pModel->vertex, &pModel->offset);
+			
+			vkCmdDraw(commandBuffer, pModel->count, 1, 0, 0);
+		}
 
 		vkCmdEndRenderPass(commandBuffer);
 

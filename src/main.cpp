@@ -104,6 +104,13 @@ int main() {
 	Canvas canvas = nullptr;
 	RenderBox renderBox = nullptr;
 	Renderer renderer = nullptr;
+
+	AsyncLoader loader = nullptr;
+
+	ProcessCookie cookie = nullptr;
+	Scene scene = nullptr;
+
+	Model model = nullptr;
 	
 	do {
 		int failure;
@@ -195,9 +202,58 @@ int main() {
 		{
 			RendererCreateInfo createInfo{};
 			createInfo.maxRenderProcess = 2u;
+			createInfo.callDrawLimit = 10u;
 
-			failure = createRenderer(emulator, canvas, renderBox, &createInfo, &renderer);
+			failure = createRenderer(emulator, &createInfo, &renderer);
 		}
+		
+		if (failure)
+			break;
+
+		{
+			AsyncLoaderCreateInfo createInfo{};
+			createInfo.stageSize = 16ull << 20;
+			createInfo.maxLoadProcess = 2u;
+
+			failure = createAsyncLoader(emulator, &createInfo, &loader);
+		}
+
+		if (failure)
+			break;
+
+		failure = allocateProcessCookie(&cookie);
+
+		if (failure)
+			break;
+
+		{
+			SceneCreateInfo createInfo{};
+			createInfo.modelCount = 1u;
+
+			failure = createScene(emulator, &createInfo, &scene);
+		}
+
+		if (failure)
+			break;
+
+		{
+			Vertex data[] = {
+				{ {  0.0f, -0.5f }, { 1.0f, 0.0f, 0.0f } },
+				{ {  0.5f,  0.5f }, { 0.0f, 1.0f, 0.0f } },
+				{ { -0.5f,  0.5f }, { 0.0f, 0.0f, 1.0f } },
+			};
+
+			ModelCreateInfo createInfo{};
+			createInfo.pVertex = data;
+			createInfo.vertexCount = 3u;
+
+			failure = loadModel(loader, scene, &createInfo, &model, cookie);
+		}
+
+		if (failure)
+			break;
+
+		failure = waitProcess(emulator, cookie);
 
 		if (failure)
 			break;
@@ -237,7 +293,7 @@ int main() {
 				control &= ~FLOW_CONTROL_WAIT_BIT;
 			}
 
-			failure = draw(canvas, renderer, renderBox);
+			failure = draw(canvas, renderer, renderBox, scene);
 
 			if (failure == -1)
 				break;
@@ -249,6 +305,10 @@ int main() {
 			break;
 
 		while (waitRenderer(renderer));
+
+		destroyScene(scene);
+		freeProcessCookie(cookie);
+		destroyAsyncLoader(loader);
 
 		destroyRenderer(renderer);
 		destroyRenderBox(renderBox);
@@ -267,6 +327,15 @@ int main() {
 
 	if (emulator)
 		while (waitEmulator(emulator));
+
+	if (scene)
+		destroyScene(scene);
+
+	if (cookie)
+		freeProcessCookie(cookie);
+
+	if (loader)
+		destroyAsyncLoader(loader);
 
 	if (renderer)
 		destroyRenderer(renderer);
