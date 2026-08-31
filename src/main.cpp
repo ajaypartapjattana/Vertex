@@ -124,8 +124,8 @@ int main() {
 			WindowCreateInfo createInfo{};
 			createInfo.flags = WINDOW_CREATE_FULLSCREEN_BIT | WINDOW_CREATE_RESIZABLE_BIT;
 			createInfo.width = 800u;
-			createInfo.height = 600u;
-			createInfo.x = -100;
+			createInfo.height = 800u;
+			createInfo.x = 0;
 			createInfo.title = "My Window";
 
 			failure = createDisplayWindow(windowCtx, &createInfo, &window);
@@ -237,15 +237,22 @@ int main() {
 			break;
 
 		{
-			Vertex data[] = {
-				{ {  0.0f, -0.5f }, { 1.0f, 0.0f, 0.0f } },
-				{ {  0.5f,  0.5f }, { 0.0f, 1.0f, 0.0f } },
-				{ { -0.5f,  0.5f }, { 0.0f, 0.0f, 1.0f } },
+			const Vertex vertexData[] = {
+				{ { -0.5f, -0.5f }, { 0.0f, 1.0f, 0.0f } },
+				{ {  0.5f, -0.5f }, { 0.0f, 1.0f, 0.0f } },
+				{ {  0.5f,  0.5f }, { 1.0f, 1.0f, 1.0f } },
+				{ { -0.5f,  0.5f }, { 1.0f, 1.0f, 1.0f } }
+			};
+
+			const Index indexData[] = {
+				0, 1, 2, 2, 3, 0
 			};
 
 			ModelCreateInfo createInfo{};
-			createInfo.pVertex = data;
-			createInfo.vertexCount = 3u;
+			createInfo.vertexCount = 4u;
+			createInfo.pVertex = vertexData;
+			createInfo.indexCount = 6u;
+			createInfo.pIndex = indexData;
 
 			failure = loadModel(loader, scene, &createInfo, &model, cookie);
 		}

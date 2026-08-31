@@ -37,6 +37,8 @@ struct AsyncLoaderCreateInfo {
 int createAsyncLoader(Emulator const _Emulator, const AsyncLoaderCreateInfo* const pCreateInfo, AsyncLoader* const pAsyncLoader) noexcept;
 void destroyAsyncLoader(AsyncLoader const _AsynLoader) noexcept;
 
+int waitAsyncLoader(AsyncLoader const _AsyncLoader) noexcept;
+
 struct ProcessCookie_T;
 using ProcessCookie = ProcessCookie_T*;
 
@@ -63,9 +65,13 @@ struct Vertex {
 	glm::vec3 color;
 };
 
+using Index = uint32_t;
+
 struct ModelCreateInfo {
 	const Vertex* pVertex;
 	size_t vertexCount;
+	const Index* pIndex;
+	size_t indexCount;
 };
 
 int loadModel(AsyncLoader const _AsynLoader, Scene const _Scene, const ModelCreateInfo* const pCreateInfo, Model* const pModel, ProcessCookie const _ProcessCookie) noexcept;

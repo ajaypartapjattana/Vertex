@@ -797,7 +797,10 @@ enum ModelStateFlagBit : ModelStateFlags {
 struct Model_T {
 	VkBuffer vertex;
 	VmaAllocation vertexAllocation;
-	VkDeviceSize offset;
+	VkDeviceSize vertexoffset;
+	VkBuffer index;
+	VmaAllocation indexAllocation;
+	VkDeviceSize indexOffset;
 	uint32_t count;
 	ModelStateFlags state;
 };
@@ -848,6 +851,7 @@ void destroyScene(Scene const _Scene) noexcept {
 		if (!pModel->state)
 			continue;
 
+		vmaDestroyBuffer(allocator, pModel->index, pModel->indexAllocation);
 		vmaDestroyBuffer(allocator, pModel->vertex, pModel->vertexAllocation);
 	}
 
@@ -860,8 +864,10 @@ int loadModel(AsyncLoader const _AsynLoader, Scene const _Scene, const ModelCrea
 	const VkDevice device = _AsynLoader->device;
 	const VmaAllocator allocator = _AsynLoader->allocator;
 
-	VkBuffer _buffer = VK_NULL_HANDLE;
-	VmaAllocation _allocation;
+	VkBuffer _vertexBuffer = VK_NULL_HANDLE;
+	VmaAllocation _vertexAllocation;
+	VkBuffer _indexBuffer = VK_NULL_HANDLE;
+	VmaAllocation _indexAllocation;
 
 	do {
 		VkResult result;
@@ -871,17 +877,17 @@ int loadModel(AsyncLoader const _AsynLoader, Scene const _Scene, const ModelCrea
 		if (model == _Scene->model.pEnd)
 			break;
 
-		const size_t dataSize = pCreateInfo->vertexCount * sizeof(Vertex);
+		const size_t vertexDataSize = pCreateInfo->vertexCount * sizeof(Vertex);
 
 		{
 			VkBufferCreateInfo createInfo{};
 			createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 			createInfo.pNext = nullptr;
 			createInfo.flags = 0;
-			createInfo.size = static_cast<VkDeviceSize>(dataSize);
+			createInfo.size = static_cast<VkDeviceSize>(vertexDataSize);
 			createInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 			createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-			createInfo.queueFamilyIndexCount = 0;
+			createInfo.queueFamilyIndexCount = 0u;
 			createInfo.pQueueFamilyIndices = nullptr;
 
 			VmaAllocationCreateInfo allocationCreateInfo{};
@@ -894,32 +900,83 @@ int loadModel(AsyncLoader const _AsynLoader, Scene const _Scene, const ModelCrea
 			allocationCreateInfo.pUserData = nullptr;
 			allocationCreateInfo.priority = 0.0f;
 
-			result = vmaCreateBuffer(allocator, &createInfo, &allocationCreateInfo, &_buffer, &_allocation, nullptr);
+			result = vmaCreateBuffer(allocator, &createInfo, &allocationCreateInfo, &_vertexBuffer, &_vertexAllocation, nullptr);
 		}
 
 		if (result != VK_SUCCESS)
 			break;
 
+		const size_t indexDataSize = pCreateInfo->indexCount * sizeof(Index);
+
+		{
+			VkBufferCreateInfo createInfo{};
+			createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+			createInfo.pNext = nullptr;
+			createInfo.flags = 0;
+			createInfo.size = indexDataSize;
+			createInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+			createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+			createInfo.queueFamilyIndexCount = 0u;
+			createInfo.pQueueFamilyIndices = nullptr;
+
+			VmaAllocationCreateInfo allocationCreateInfo{};
+			allocationCreateInfo.flags = 0;
+			allocationCreateInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+			allocationCreateInfo.requiredFlags = 0;
+			allocationCreateInfo.preferredFlags = 0;
+			allocationCreateInfo.memoryTypeBits = 0;
+			allocationCreateInfo.pool = VK_NULL_HANDLE;
+			allocationCreateInfo.pUserData = nullptr;
+			allocationCreateInfo.priority = 0.0f;
+
+			result = vmaCreateBuffer(allocator, &createInfo, &allocationCreateInfo, &_indexBuffer, &_indexAllocation, nullptr);
+		}
+
+		if (result != VK_SUCCESS)
+			break;
+		
 		int allocationResult;
 
-		StageAllocation allocation;
+		StageAllocation vertexDataRegion;
 
 		{
 			size_t bufferAllocationGranularity[1] = { 1u };
 
 			StageAllocationCreateInfo createInfo{};
 			createInfo.data = pCreateInfo->pVertex;
-			createInfo.size = dataSize;
+			createInfo.size = vertexDataSize;
 			createInfo.allocationGranularityCount = 1;
 			createInfo.pAllocationGranularity = bufferAllocationGranularity;
 
-			allocationResult = createStageAllocation(&_AsynLoader->stage, &createInfo, &allocation);
+			allocationResult = createStageAllocation(&_AsynLoader->stage, &createInfo, &vertexDataRegion);
 		}
 
 		if (allocationResult < 0)
 			break;
 
-		result = vmaFlushAllocation(allocator, _AsynLoader->allocation, allocation.offset, allocation.size);
+		result = vmaFlushAllocation(allocator, _AsynLoader->allocation, vertexDataRegion.offset, vertexDataRegion.size);
+
+		if (result != VK_SUCCESS)
+			break;
+
+		StageAllocation indexDataRegion;
+
+		{
+			size_t bufferAllocationGranularity[1] = { 1u };
+
+			StageAllocationCreateInfo createInfo{};
+			createInfo.data = pCreateInfo->pIndex;
+			createInfo.size = indexDataSize;
+			createInfo.allocationGranularityCount = 1;
+			createInfo.pAllocationGranularity = bufferAllocationGranularity;
+
+			allocationResult = createStageAllocation(&_AsynLoader->stage, &createInfo, &indexDataRegion);
+		}
+
+		if (allocationResult < 0)
+			break;
+
+		result = vmaFlushAllocation(allocator, _AsynLoader->allocation, indexDataRegion.offset, indexDataRegion.size);
 
 		if (result != VK_SUCCESS)
 			break;
@@ -953,11 +1010,20 @@ int loadModel(AsyncLoader const _AsynLoader, Scene const _Scene, const ModelCrea
 
 		{
 			VkBufferCopy region{};
-			region.srcOffset = allocation.offset;
-			region.dstOffset = 0;
-			region.size = allocation.size;
+			region.srcOffset = vertexDataRegion.offset;
+			region.dstOffset = 0u;
+			region.size = vertexDataRegion.size;
 	
-			vkCmdCopyBuffer(commandBuffer, _AsynLoader->buffer, _buffer, 1, &region);
+			vkCmdCopyBuffer(commandBuffer, _AsynLoader->buffer, _vertexBuffer, 1, &region);
+		}
+
+		{
+			VkBufferCopy region{};
+			region.srcOffset = indexDataRegion.offset;
+			region.dstOffset = 0u;
+			region.size = indexDataRegion.size;
+
+			vkCmdCopyBuffer(commandBuffer, _AsynLoader->buffer, _indexBuffer, 1, &region);
 		}
 
 		result = vkEndCommandBuffer(commandBuffer);
@@ -990,9 +1056,13 @@ int loadModel(AsyncLoader const _AsynLoader, Scene const _Scene, const ModelCrea
 		if (result != VK_SUCCESS)
 			break;
 
-		model->vertex = _buffer;
-		model->vertexAllocation = _allocation;
-		model->count = pCreateInfo->vertexCount;
+		model->vertex = _vertexBuffer;
+		model->vertexAllocation = _vertexAllocation;
+		model->vertexoffset = 0u;
+		model->index = _indexBuffer;
+		model->indexAllocation = _indexAllocation;
+		model->indexOffset = 0u;
+		model->count = pCreateInfo->indexCount;
 		model->state = MODEL_STATE_LOADED_BIT | MODEL_STATE_VISIBLE_BIT;
 
 		*pModel = model;
@@ -1007,9 +1077,12 @@ int loadModel(AsyncLoader const _AsynLoader, Scene const _Scene, const ModelCrea
 		return 0;
 
 	} while (false);
+
+	if (_indexBuffer)
+		vmaDestroyBuffer(allocator, _indexBuffer, _indexAllocation);
 	
-	if (_buffer)
-		vmaDestroyBuffer(allocator, _buffer, _allocation);
+	if (_vertexBuffer)
+		vmaDestroyBuffer(allocator, _vertexBuffer, _vertexAllocation);
 
 	return -1;
 }
@@ -1017,7 +1090,22 @@ int loadModel(AsyncLoader const _AsynLoader, Scene const _Scene, const ModelCrea
 void releaseModel(Scene const _Scene, Model const _Model) noexcept {
 	const VmaAllocator allocator = _Scene->allocator;
 
+	vmaDestroyBuffer(allocator, _Model->index, _Model->indexAllocation);
 	vmaDestroyBuffer(allocator, _Model->vertex, _Model->vertexAllocation);
+}
+
+int waitAsyncLoader(AsyncLoader const _AsyncLoader) noexcept {
+	do {
+		VkResult result = vkWaitForFences(_AsyncLoader->device, static_cast<uint32_t>(_AsyncLoader->fence.size()), _AsyncLoader->fence, VK_TRUE, UINT64_MAX);
+
+		if (result != VK_SUCCESS)
+			break;
+
+		return 0;
+
+	} while (false);
+
+	return -1;
 }
 
 int waitProcess(Emulator const _Emulator, ProcessCookie const _Cookie) noexcept {
@@ -1038,6 +1126,7 @@ struct Canvas_T {
 	VkSurfaceKHR surface;
 	VkPhysicalDevice physicalDevice;
 	VkDevice device;
+	VkQueue queue;
 
 	VkSurfaceFormatKHR surfaceFormat;
 	VkPresentModeKHR presentMode;
@@ -1356,6 +1445,7 @@ int createCanvas(Emulator const _Emulator, const CanvasCreateInfo* const pCreate
 		canvas->presentMode = presentMode;
 		canvas->surfaceFormat = surfaceFormat;
 
+		canvas->queue = _Emulator->queue.present;
 		canvas->device = device;
 		canvas->physicalDevice = physicalDevice;
 		canvas->surface = surface;
@@ -2018,8 +2108,7 @@ void destroyRenderBox(RenderBox const _RenderBox) noexcept {
 
 struct Renderer_T {
 	VkDevice device;
-	VkQueue graphics;
-	VkQueue present;
+	VkQueue queue;
 
 	VkCommandPool commandPool;
 	mem::span<VkCommandBuffer> commandBuffer;
@@ -2161,8 +2250,7 @@ int createRenderer(Emulator const _Emulator, const RendererCreateInfo* const pCr
 		renderer->commandBuffer = _commandBuffer;
 		renderer->commandPool = _commandPool;
 
-		renderer->present = _Emulator->queue.present;
-		renderer->graphics = _Emulator->queue.graphics;
+		renderer->queue = _Emulator->queue.graphics;
 		renderer->device = device;
 
 		*pRenderer = renderer;
@@ -2243,7 +2331,7 @@ int waitRenderer(Renderer const _Renderer) noexcept {
 	do {
 		VkResult result;
 
-		result = vkQueueWaitIdle(_Renderer->graphics);
+		result = vkWaitForFences(device, static_cast<uint32_t>(_Renderer->frameFence.size()), _Renderer->frameFence, VK_TRUE, UINT64_MAX);
 
 		if (result == VK_TIMEOUT)
 			return 1;
@@ -2251,14 +2339,6 @@ int waitRenderer(Renderer const _Renderer) noexcept {
 		if (result != VK_SUCCESS)
 			break;
 
-		result = vkQueueWaitIdle(_Renderer->present);
-
-		if (result == VK_TIMEOUT)
-			return 1;
-
-		if (result != VK_SUCCESS)
-			break;
-		
 		return 0;
 
 	} while (false);
@@ -2361,9 +2441,10 @@ int draw(Canvas const _Canvas, Renderer const _Renderer, RenderBox const _Render
 			if (!(pModel->state & MODEL_STATE_VISIBLE_BIT))
 				continue;
 
-			vkCmdBindVertexBuffers(commandBuffer, 0, 1, &pModel->vertex, &pModel->offset);
+			vkCmdBindVertexBuffers(commandBuffer, 0, 1, &pModel->vertex, &pModel->vertexoffset);
+			vkCmdBindIndexBuffer(commandBuffer, pModel->index, 0u, VK_INDEX_TYPE_UINT32);
 			
-			vkCmdDraw(commandBuffer, pModel->count, 1, 0, 0);
+			vkCmdDrawIndexed(commandBuffer, pModel->count, 1, 0, pModel->vertexoffset, 0);
 		}
 
 		vkCmdEndRenderPass(commandBuffer);
@@ -2394,7 +2475,7 @@ int draw(Canvas const _Canvas, Renderer const _Renderer, RenderBox const _Render
 			submitInfo.signalSemaphoreCount = 1u;
 			submitInfo.pSignalSemaphores = &renderSemaphore;
 
-			result = vkQueueSubmit(_Renderer->graphics, 1u, &submitInfo, _Renderer->frameFence[frame]);
+			result = vkQueueSubmit(_Renderer->queue, 1u, &submitInfo, _Renderer->frameFence[frame]);
 		}
 
 		if (result != VK_SUCCESS)
@@ -2413,7 +2494,7 @@ int draw(Canvas const _Canvas, Renderer const _Renderer, RenderBox const _Render
 			presentInfo.pResults = nullptr;
 			presentInfo.pImageIndices = &imageIndex;
 
-			result = vkQueuePresentKHR(_Renderer->present, &presentInfo);
+			result = vkQueuePresentKHR(_Canvas->queue, &presentInfo);
 		}
 		
 		_Renderer->frame++;
